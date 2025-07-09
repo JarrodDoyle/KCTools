@@ -1,6 +1,6 @@
 using System.Text;
 
-namespace KeepersCompound.LGS.Database;
+namespace KeepersCompound.Dark.Database;
 
 public struct ChunkHeader
 {

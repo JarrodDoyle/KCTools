@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace KeepersCompound.LGS.Database.Chunks;
+namespace KeepersCompound.Dark.Database.Chunks;
 
 public class WorldRep : IChunk
 {

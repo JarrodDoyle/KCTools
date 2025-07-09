@@ -1,9 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
-using KeepersCompound.LGS.Database;
+using KeepersCompound.Dark.Database;
 using Serilog;
 
-namespace KeepersCompound.LGS.Resources;
+namespace KeepersCompound.Dark.Resources;
 
 public class ResourceManager
 {

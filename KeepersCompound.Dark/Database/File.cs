@@ -1,8 +1,8 @@
 using System.Text;
-using KeepersCompound.LGS.Database.Chunks;
+using KeepersCompound.Dark.Database.Chunks;
 using Serilog;
 
-namespace KeepersCompound.LGS.Database;
+namespace KeepersCompound.Dark.Database;
 
 public class DbFile
 {

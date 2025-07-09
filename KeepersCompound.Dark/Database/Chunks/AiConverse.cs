@@ -1,4 +1,4 @@
-namespace KeepersCompound.LGS.Database.Chunks;
+namespace KeepersCompound.Dark.Database.Chunks;
 
 public class AiConverseChunk : IChunk
 {

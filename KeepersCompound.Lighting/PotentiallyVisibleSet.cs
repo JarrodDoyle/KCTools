@@ -1,6 +1,6 @@
 using System.Collections;
 using System.Numerics;
-using KeepersCompound.LGS.Database.Chunks;
+using KeepersCompound.Dark.Database.Chunks;
 using Serilog;
 
 namespace KeepersCompound.Lighting;
