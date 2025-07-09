@@ -1,4 +1,4 @@
-namespace KeepersCompound.LGS;
+namespace KeepersCompound.Dark;
 
 public class PathUtils
 {

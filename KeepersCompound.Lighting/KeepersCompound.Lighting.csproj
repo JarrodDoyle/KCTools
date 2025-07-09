@@ -13,7 +13,7 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\KeepersCompound.LGS\KeepersCompound.LGS.csproj" />
+        <ProjectReference Include="..\KeepersCompound.Dark\KeepersCompound.Dark.csproj" />
     </ItemGroup>
 
 </Project>

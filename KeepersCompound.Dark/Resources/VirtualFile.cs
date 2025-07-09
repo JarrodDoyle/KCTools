@@ -1,6 +1,6 @@
 using System.IO.Compression;
 
-namespace KeepersCompound.LGS.Resources;
+namespace KeepersCompound.Dark.Resources;
 
 public abstract class BaseVirtualFile
 {

@@ -1,6 +1,6 @@
 using Serilog;
 
-namespace KeepersCompound.LGS.Database.Chunks;
+namespace KeepersCompound.Dark.Database.Chunks;
 
 public record LinkId
 {

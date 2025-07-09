@@ -22,7 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\KeepersCompound.LGS\KeepersCompound.LGS.csproj" />
+    <ProjectReference Include="..\KeepersCompound.Dark\KeepersCompound.Dark.csproj" />
     <ProjectReference Include="..\KeepersCompound.Lighting\KeepersCompound.Lighting.csproj" />
   </ItemGroup>
 

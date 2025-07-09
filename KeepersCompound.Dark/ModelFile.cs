@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Text;
 
-namespace KeepersCompound.LGS;
+namespace KeepersCompound.Dark;
 
 // TODO: Remove all the things that don't actually need to be stored
 public class ModelFile

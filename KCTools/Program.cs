@@ -1,8 +1,8 @@
 using System.Numerics;
 using System.Text;
 using DotMake.CommandLine;
-using KeepersCompound.LGS;
-using KeepersCompound.LGS.Resources;
+using KeepersCompound.Dark;
+using KeepersCompound.Dark.Resources;
 using KeepersCompound.Lighting;
 using Serilog;
 using Serilog.Sinks.SystemConsole.Themes;

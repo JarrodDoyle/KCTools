@@ -1,8 +1,8 @@
 using System.Numerics;
-using KeepersCompound.LGS;
-using KeepersCompound.LGS.Database;
-using KeepersCompound.LGS.Database.Chunks;
-using KeepersCompound.LGS.Resources;
+using KeepersCompound.Dark;
+using KeepersCompound.Dark.Database;
+using KeepersCompound.Dark.Database.Chunks;
+using KeepersCompound.Dark.Resources;
 using Serilog;
 
 namespace KeepersCompound.Lighting;

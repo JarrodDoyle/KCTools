@@ -1,7 +1,7 @@
 using System.Numerics;
 using System.Text;
 
-namespace KeepersCompound.LGS;
+namespace KeepersCompound.Dark;
 
 public static class Extensions
 {

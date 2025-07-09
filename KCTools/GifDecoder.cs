@@ -1,5 +1,5 @@
 using System.Text;
-using KeepersCompound.LGS;
+using KeepersCompound.Dark;
 
 namespace KCTools;
 

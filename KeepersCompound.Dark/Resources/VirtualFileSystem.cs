@@ -2,7 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using Serilog;
 
-namespace KeepersCompound.LGS.Resources;
+namespace KeepersCompound.Dark.Resources;
 
 public class VirtualFileSystem
 {

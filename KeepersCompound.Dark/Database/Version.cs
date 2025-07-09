@@ -1,4 +1,4 @@
-namespace KeepersCompound.LGS.Database;
+namespace KeepersCompound.Dark.Database;
 
 public struct Version
 {

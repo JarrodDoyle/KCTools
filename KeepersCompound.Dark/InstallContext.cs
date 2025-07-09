@@ -1,6 +1,6 @@
 using Serilog;
 
-namespace KeepersCompound.LGS;
+namespace KeepersCompound.Dark;
 
 internal enum ConfigFile
 {
