@@ -154,6 +154,12 @@ public class ModelFileParser : IBinaryParser<ModelFile>
                 VertexIndices = polyVertexIndices,
                 MaterialId = polyMaterialId,
             });
+
+            // Just because the model says it has a certain amount of polygons, doesn't mean it actually does :))
+            if (reader.BaseStream.Position >= nodeOffset)
+            {
+                break;
+            }
         }
 
         var objects = new List<ModelObject>(objectCount);
