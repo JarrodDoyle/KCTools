@@ -74,9 +74,9 @@ public class ModelFileParser : IBinaryParser<ModelFile>
             var vnVertexId = reader.ReadUInt16();
             var vnCompactNormal = reader.ReadUInt32();
             var vnNormal = new Vector3(
-                ((vnCompactNormal >> 16) & 0xFFC0) / 16384.0f,
-                ((vnCompactNormal >> 6) & 0xFFC0) / 16384.0f,
-                ((vnCompactNormal << 4) & 0xFFC0) / 16384.0f);
+                (short)((vnCompactNormal >> 16) & 0xFFC0) / 16384.0f,
+                (short)((vnCompactNormal >> 6) & 0xFFC0) / 16384.0f,
+                (short)((vnCompactNormal << 4) & 0xFFC0) / 16384.0f);
             vertexNormals.Add(new ModelVertexNormal
             {
                 MaterialId = vnMaterialId,
