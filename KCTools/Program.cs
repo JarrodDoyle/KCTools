@@ -3,6 +3,7 @@ using System.Text;
 using DotMake.CommandLine;
 using KeepersCompound.Dark;
 using KeepersCompound.Dark.Resources;
+using KeepersCompound.Formats.Model;
 using KeepersCompound.Lighting;
 using Serilog;
 using Serilog.Sinks.SystemConsole.Themes;
@@ -232,7 +233,7 @@ public class RootCommand
 
                 var materials = BuildMaterialMap(resources, modelFile);
 
-                var objCount = modelFile.Objects.Length;
+                var objCount = modelFile.Objects.Count;
                 var meshes = new MeshBuilder<VertexPositionNormal, VertexTexture1>[objCount];
                 var nodes = new NodeBuilder[objCount];
                 for (var i = 0; i < objCount; i++)
@@ -248,9 +249,9 @@ public class RootCommand
                         var poly = modelFile.Polygons[j];
 
                         // Discards any polys that don't belong to this object
-                        var startIdx = poly.VertexIndices[0];
-                        if (startIdx < subObject.VertexStartIdx ||
-                            startIdx >= subObject.VertexStartIdx + subObject.VertexCount)
+                        var startIdx = poly.VertexIndices[0].PositionIndex;
+                        if (startIdx < subObject.VertexPositionStartIndex ||
+                            startIdx >= subObject.VertexPositionStartIndex + subObject.VertexPositionCount)
                         {
                             continue;
                         }
@@ -272,16 +273,20 @@ public class RootCommand
                         foreach (var polyIdx in polyIdxs)
                         {
                             var poly = modelFile.Polygons[polyIdx];
-                            var vertices = new Vector3[poly.VertexCount];
-                            var normal = modelFile.FaceNormals[poly.Normal];
-                            var uvs = new Vector2[poly.VertexCount];
-                            for (var j = 0; j < poly.VertexCount; j++)
+                            var vertexCount = poly.VertexIndices.Count;
+                            var vertices = new Vector3[vertexCount];
+                            var normal = modelFile.FaceNormals[poly.NormalIndex];
+                            var uvs = new Vector2[vertexCount];
+                            for (var j = 0; j < vertexCount; j++)
                             {
-                                vertices[j] = modelFile.Vertices[poly.VertexIndices[j]];
-                                uvs[j] = j < poly.UvIndices.Length ? modelFile.Uvs[poly.UvIndices[j]] : Vector2.Zero;
+                                var vertexIndex = poly.VertexIndices[j];
+                                vertices[j] = modelFile.VertexPositions[vertexIndex.PositionIndex];
+                                uvs[j] = poly.Type == ModelPolygonType.Textured
+                                    ? modelFile.VertexUvs[vertexIndex.UvIndex]
+                                    : Vector2.Zero;
                             }
 
-                            for (var j = 1; j < poly.VertexCount - 1; j++)
+                            for (var j = 1; j < vertexCount - 1; j++)
                             {
                                 prim.AddTriangle(
                                     new VERTEX(new VertexPositionNormal(vertices[0], normal), uvs[0]),
@@ -292,17 +297,17 @@ public class RootCommand
                         }
                     }
 
-                    var transform = subObject.JointType == ModelFile.JointType.None || subObject.JointIdx == -1
+                    var transform = subObject.JointType == ModelObjectType.Static  || subObject.JointIndex == -1
                         ? AffineTransform.Identity
                         : AffineTransform.CreateDecomposed(subObject.Transform);
                     var node = new NodeBuilder(subObject.Name);
                     node.SetLocalTransform(transform, false);
 
                     // Add vhots as empty nodes
-                    for (var j = 0; j < subObject.VhotCount; j++)
+                    for (var j = 0; j < subObject.VHotCount; j++)
                     {
-                        var v = modelFile.VHots[subObject.VhotStartIdx + j];
-                        var vhotNode = new NodeBuilder(v.Id.ToString());
+                        var v = modelFile.VHots[subObject.VHotStartIndex + j];
+                        var vhotNode = new NodeBuilder(v.Type.ToString());
                         vhotNode.SetLocalTransform(new AffineTransform(null, null, v.Position), false);
                         node.AddNode(vhotNode);
                     }
@@ -315,11 +320,11 @@ public class RootCommand
                 for (var i = 0; i < objCount; i++)
                 {
                     var subObject = modelFile.Objects[i];
-                    var childIdx = subObject.Child;
+                    var childIdx = subObject.ChildObjectIndex;
                     while (childIdx != -1)
                     {
                         nodes[i].AddNode(nodes[childIdx]);
-                        childIdx = modelFile.Objects[childIdx].Next;
+                        childIdx = modelFile.Objects[childIdx].SiblingObjectIndex;
                     }
                 }
 
@@ -381,9 +386,9 @@ public class RootCommand
                     }
                     else
                     {
-                        var b = rawMaterial.Handle & 0xff;
-                        var g = (rawMaterial.Handle >> 8) & 0xff;
-                        var r = (rawMaterial.Handle >> 16) & 0xff;
+                        var r = rawMaterial.Color.R;
+                        var g = rawMaterial.Color.G;
+                        var b = rawMaterial.Color.B;
                         var colour = new Vector4(r, g, b, 255.0f) / 255.0f;
                         var material = new MaterialBuilder()
                             .WithDoubleSide(false)

@@ -3,6 +3,7 @@ using KeepersCompound.Dark;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Resources;
+using KeepersCompound.Formats.Model;
 using Serilog;
 using TinyEmbree;
 
@@ -401,18 +402,20 @@ public class LightMapper
             if (_resources.TryGetModel(modelName, out var model))
             {
                 // We don't need to apply a base transform here because we're applying it later
-                var transforms = model.GetObjectTransforms(Matrix4x4.Identity, joints);
+                var transforms = model.GetObjectTransforms(Matrix4x4.Identity, [..joints]);
 
-                if (model.TryGetVhot(ModelFile.VhotId.LightPosition, out var vhot))
+                if (model.TryGetVhot(ModelVHotType.LightPosition, out var vhot))
                 {
-                    var transform = vhot.SubObjectId != -1 ? transforms[vhot.SubObjectId] : Matrix4x4.Identity;
-                    vhotLightPos = Vector3.Transform(vhot.Position, transform) - model.Header.Center;
+                    var objId = model.GetVhotObjectMapping(ModelVHotType.LightPosition);
+                    var transform = objId != -1 ? transforms[objId] : Matrix4x4.Identity;
+                    vhotLightPos = Vector3.Transform(vhot.Position, transform) - model.Center;
                 }
 
-                if (model.TryGetVhot(ModelFile.VhotId.LightDirection, out vhot))
+                if (model.TryGetVhot(ModelVHotType.LightDirection, out vhot))
                 {
-                    var transform = vhot.SubObjectId != -1 ? transforms[vhot.SubObjectId] : Matrix4x4.Identity;
-                    vhotLightDir = Vector3.Transform(vhot.Position, transform) - model.Header.Center - vhotLightPos;
+                    var objId = model.GetVhotObjectMapping(ModelVHotType.LightDirection);
+                    var transform = objId != -1 ? transforms[objId] : Matrix4x4.Identity;
+                    vhotLightDir = Vector3.Transform(vhot.Position, transform) - model.Center - vhotLightPos;
                 }
             }
         }
