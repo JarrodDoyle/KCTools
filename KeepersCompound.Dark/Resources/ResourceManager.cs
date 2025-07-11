@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using KeepersCompound.Dark.Database;
+using KeepersCompound.Formats.Model;
 using Serilog;
 
 namespace KeepersCompound.Dark.Resources;
@@ -66,7 +67,13 @@ public class ResourceManager
         if (_vfs.TryGetFileMemoryStream(name, out var stream))
         {
             using BinaryReader reader = new(stream, Encoding.UTF8, false);
-            model = new ModelFile(reader);
+            var parser = new ModelFileParser();
+            model = parser.Read(reader);
+            if (model == null)
+            {
+                return false;
+            }
+
             _modelCache.Add(name, model);
             return true;
         }

@@ -1,5 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
+using Serilog;
 
 namespace KeepersCompound.Formats.Model;
 
@@ -134,15 +135,22 @@ public class ModelFile
         for (var i = 0; i < objCount; i++)
         {
             var subObj = Objects[i];
-            var jointValue = subObj.JointIndex >= jointValues.Count ? 0 : jointValues[subObj.JointIndex];
-            subObjTransforms[i] = subObj.JointType switch
+            var objTrans = Matrix4x4.Identity;
+
+            if (subObj.JointType == ModelObjectType.Rotating && subObj.JointIndex != -1)
             {
-                ModelObjectType.Rotating when subObj.JointIndex != -1 =>
-                    Matrix4x4.CreateFromYawPitchRoll(0, float.DegreesToRadians(jointValue), 0) * subObj.Transform,
-                ModelObjectType.Sliding when subObj.JointIndex != -1 =>
-                    Matrix4x4.CreateTranslation(jointValue, 0, 0) * subObj.Transform,
-                _ => Matrix4x4.Identity,
-            };
+                var ang = subObj.JointIndex >= jointValues.Count ? 0 : float.DegreesToRadians(jointValues[subObj.JointIndex]);
+                var jointRot = Matrix4x4.CreateFromYawPitchRoll(0, ang, 0);
+                objTrans = jointRot * subObj.Transform;
+            }
+            else if (subObj.JointType == ModelObjectType.Sliding && subObj.JointIndex != -1)
+            {
+                var dist = subObj.JointIndex >= jointValues.Count ? 0 : jointValues[subObj.JointIndex];
+                var translation = Matrix4x4.CreateTranslation(dist, 0, 0);
+                objTrans = translation * subObj.Transform;
+            }
+
+            subObjTransforms[i] = objTrans;
         }
 
         // Final transforms are composed by climbing the hierarchy and applying parent transforms
@@ -160,7 +168,7 @@ public class ModelFile
             }
 
             transform *= baseTransform;
-            transforms[i] = transform;
+            transforms.Add(transform);
         }
 
         return transforms;
