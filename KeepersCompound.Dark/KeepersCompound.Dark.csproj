@@ -12,4 +12,8 @@
     <PackageReference Include="Serilog" Version="4.3.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\KeepersCompound.Formats\KeepersCompound.Formats.csproj" />
+  </ItemGroup>
+
 </Project>
