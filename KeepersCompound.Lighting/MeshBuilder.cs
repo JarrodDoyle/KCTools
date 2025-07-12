@@ -92,12 +92,9 @@ public class MeshBuilder
             }
 
             // Let's try and place an object :)
-            // TODO: Handle failing to find model more gracefully
-            // var modelName = modelNameProp.Value.ToLower() + ".bin";
-            var modelName = $"obj/{modelNameProp.Value}.bin";
-            if (!resources.TryGetModel(modelName, out var model))
+            if (!resources.TryGetModel(modelNameProp.Value, out var model))
             {
-                Log.Warning("Failed to find model file: {Name}", modelName);
+                Log.Warning("Failed to find model file: {Name}", modelNameProp.Value);
                 continue;
             }
 

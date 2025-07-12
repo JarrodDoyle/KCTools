@@ -396,27 +396,23 @@ public class LightMapper
 
         var vhotLightPos = Vector3.Zero;
         var vhotLightDir = -Vector3.UnitZ;
-        if (propModelName != null)
+        if (propModelName != null && _resources.TryGetModel(propModelName.Value, out var model))
         {
-            var modelName = $"obj/{propModelName.Value}.bin";
-            if (_resources.TryGetModel(modelName, out var model))
+            // We don't need to apply a base transform here because we're applying it later
+            var transforms = model.GetObjectTransforms(Matrix4x4.Identity, [..joints]);
+
+            if (model.TryGetVhot(ModelVHotType.LightPosition, out var vhot))
             {
-                // We don't need to apply a base transform here because we're applying it later
-                var transforms = model.GetObjectTransforms(Matrix4x4.Identity, [..joints]);
+                var objId = model.GetVhotObjectMapping(ModelVHotType.LightPosition);
+                var transform = objId != -1 ? transforms[objId] : Matrix4x4.Identity;
+                vhotLightPos = Vector3.Transform(vhot.Position, transform) - model.Center;
+            }
 
-                if (model.TryGetVhot(ModelVHotType.LightPosition, out var vhot))
-                {
-                    var objId = model.GetVhotObjectMapping(ModelVHotType.LightPosition);
-                    var transform = objId != -1 ? transforms[objId] : Matrix4x4.Identity;
-                    vhotLightPos = Vector3.Transform(vhot.Position, transform) - model.Center;
-                }
-
-                if (model.TryGetVhot(ModelVHotType.LightDirection, out vhot))
-                {
-                    var objId = model.GetVhotObjectMapping(ModelVHotType.LightDirection);
-                    var transform = objId != -1 ? transforms[objId] : Matrix4x4.Identity;
-                    vhotLightDir = Vector3.Transform(vhot.Position, transform) - model.Center - vhotLightPos;
-                }
+            if (model.TryGetVhot(ModelVHotType.LightDirection, out vhot))
+            {
+                var objId = model.GetVhotObjectMapping(ModelVHotType.LightDirection);
+                var transform = objId != -1 ? transforms[objId] : Matrix4x4.Identity;
+                vhotLightDir = Vector3.Transform(vhot.Position, transform) - model.Center - vhotLightPos;
             }
         }
 

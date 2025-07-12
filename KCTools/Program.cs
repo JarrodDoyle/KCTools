@@ -207,7 +207,7 @@ public class RootCommand
                 var modelCount = 0;
                 if (ModelName != null)
                 {
-                    ExportModel(resources, $"obj/{ModelName}.bin");
+                    ExportModel(resources, ModelName);
                     modelCount++;
                 }
                 else

@@ -47,7 +47,9 @@ public class ResourceManager
 
         DbFileNames = _vfs.GetFilesInFolder("", [".mis", ".cow", ".gam"], false);
         TextureNames = _vfs.GetFilesInFolder("fam", _textureExtensions, true);
-        ObjectNames = _vfs.GetFilesInFolder("obj", [".bin"], false);
+        ObjectNames = [];
+        _vfs.GetFilesInFolder("obj", [".bin"], false).ToList()
+            .ForEach(path => ObjectNames.Add(Path.GetFileNameWithoutExtension(path)));
         ObjectTextureNames = _vfs.GetFilesInFolder("obj/txt", _textureExtensions, false);
         ObjectTextureNames.UnionWith(_vfs.GetFilesInFolder("obj/txt16", _textureExtensions, false));
 
@@ -64,7 +66,7 @@ public class ResourceManager
             return true;
         }
 
-        if (_vfs.TryGetFileMemoryStream(name, out var stream))
+        if (_vfs.TryGetFileMemoryStream($"obj/{name}.bin", out var stream))
         {
             using BinaryReader reader = new(stream, Encoding.UTF8, false);
             var parser = new ModelFileParser();
