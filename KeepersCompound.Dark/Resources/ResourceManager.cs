@@ -12,7 +12,12 @@ public class ResourceManager
 
     public HashSet<string> DbFileNames { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> TextureNames { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// All model filenames in current resource context excluding extension.
+    /// </summary>
     public HashSet<string> ModelNames { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
     public HashSet<string> ModelTextureNames { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
     private VirtualFileSystem _vfs = new();
