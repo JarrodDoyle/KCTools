@@ -212,7 +212,7 @@ public class RootCommand
                 }
                 else
                 {
-                    foreach (var modelName in resources.ObjectNames)
+                    foreach (var modelName in resources.ModelNames)
                     {
                         ExportModel(resources, modelName);
                         modelCount++;
