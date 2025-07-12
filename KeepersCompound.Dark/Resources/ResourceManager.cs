@@ -12,8 +12,13 @@ public class ResourceManager
 
     public HashSet<string> DbFileNames { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
     public HashSet<string> TextureNames { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
-    public HashSet<string> ObjectNames { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
-    public HashSet<string> ObjectTextureNames { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// All model filenames in current resource context excluding extension.
+    /// </summary>
+    public HashSet<string> ModelNames { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public HashSet<string> ModelTextureNames { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
     private VirtualFileSystem _vfs = new();
     private Dictionary<string, ModelFile> _modelCache = new(StringComparer.OrdinalIgnoreCase);
@@ -47,14 +52,16 @@ public class ResourceManager
 
         DbFileNames = _vfs.GetFilesInFolder("", [".mis", ".cow", ".gam"], false);
         TextureNames = _vfs.GetFilesInFolder("fam", _textureExtensions, true);
-        ObjectNames = _vfs.GetFilesInFolder("obj", [".bin"], false);
-        ObjectTextureNames = _vfs.GetFilesInFolder("obj/txt", _textureExtensions, false);
-        ObjectTextureNames.UnionWith(_vfs.GetFilesInFolder("obj/txt16", _textureExtensions, false));
+        ModelNames = [];
+        _vfs.GetFilesInFolder("obj", [".bin"], false).ToList()
+            .ForEach(path => ModelNames.Add(Path.GetFileNameWithoutExtension(path)));
+        ModelTextureNames = _vfs.GetFilesInFolder("obj/txt", _textureExtensions, false);
+        ModelTextureNames.UnionWith(_vfs.GetFilesInFolder("obj/txt16", _textureExtensions, false));
 
         Log.Information("Virtual file system has {Count} files", _vfs.FileCount);
         Log.Information(
             "Found {DbFiles} mis/gam/cow, {Textures} textures, {Objects} objects, {ObjectTextures} object textures",
-            DbFileNames.Count, TextureNames.Count, ObjectNames.Count, ObjectTextureNames.Count);
+            DbFileNames.Count, TextureNames.Count, ModelNames.Count, ModelTextureNames.Count);
     }
 
     public bool TryGetModel(string name, [MaybeNullWhen(false)] out ModelFile model)
@@ -64,7 +71,7 @@ public class ResourceManager
             return true;
         }
 
-        if (_vfs.TryGetFileMemoryStream(name, out var stream))
+        if (_vfs.TryGetFileMemoryStream($"obj/{name}.bin", out var stream))
         {
             using BinaryReader reader = new(stream, Encoding.UTF8, false);
             var parser = new ModelFileParser();
