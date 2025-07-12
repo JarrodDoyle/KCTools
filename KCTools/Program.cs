@@ -273,14 +273,18 @@ public class RootCommand
                         foreach (var polyIdx in polyIdxs)
                         {
                             var poly = modelFile.Polygons[polyIdx];
+                            var faceNormal = modelFile.FaceNormals[poly.NormalIndex];
                             var vertexCount = poly.VertexIndices.Count;
                             var vertices = new Vector3[vertexCount];
-                            var normal = modelFile.FaceNormals[poly.NormalIndex];
+                            var normals = new Vector3[vertexCount];
                             var uvs = new Vector2[vertexCount];
                             for (var j = 0; j < vertexCount; j++)
                             {
                                 var vertexIndex = poly.VertexIndices[j];
                                 vertices[j] = modelFile.VertexPositions[vertexIndex.PositionIndex];
+                                normals[j] = poly.UseVertexNormals
+                                    ? modelFile.VertexNormals[vertexIndex.NormalIndex].Normal
+                                    : faceNormal;
                                 uvs[j] = poly.Type == ModelPolygonType.Textured
                                     ? modelFile.VertexUvs[vertexIndex.UvIndex]
                                     : Vector2.Zero;
@@ -289,9 +293,9 @@ public class RootCommand
                             for (var j = 1; j < vertexCount - 1; j++)
                             {
                                 prim.AddTriangle(
-                                    new VERTEX(new VertexPositionNormal(vertices[0], normal), uvs[0]),
-                                    new VERTEX(new VertexPositionNormal(vertices[j + 1], normal), uvs[j + 1]),
-                                    new VERTEX(new VertexPositionNormal(vertices[j], normal), uvs[j])
+                                    new VERTEX(new VertexPositionNormal(vertices[0], normals[0]), uvs[0]),
+                                    new VERTEX(new VertexPositionNormal(vertices[j + 1], normals[j + 1]), uvs[j + 1]),
+                                    new VERTEX(new VertexPositionNormal(vertices[j], normals[j]), uvs[j])
                                 );
                             }
                         }
