@@ -125,6 +125,13 @@ public class ModelFile
             var childIdx = subObj.ChildObjectIndex;
             while (childIdx != -1)
             {
+                // This can only happen if there's a loop in the relationship. This shouldn't ever be the case, but for
+                // some reason a few Thief 2 objects have this.
+                if (childIdx == i)
+                {
+                    break;
+                }
+
                 parentIds[childIdx] = i;
                 childIdx = Objects[childIdx].SiblingObjectIndex;
             }

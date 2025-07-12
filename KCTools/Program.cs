@@ -323,6 +323,13 @@ public class RootCommand
                     var childIdx = subObject.ChildObjectIndex;
                     while (childIdx != -1)
                     {
+                        // This can only happen if there's a loop in the relationship. This shouldn't ever be the case, but for
+                        // some reason a few Thief 2 objects have this.
+                        if (childIdx == i)
+                        {
+                            break;
+                        }
+
                         nodes[i].AddNode(nodes[childIdx]);
                         childIdx = modelFile.Objects[childIdx].SiblingObjectIndex;
                     }
