@@ -699,15 +699,8 @@ public class LightMapper
             var numPolys = cell.PolyCount;
             var numRenderPolys = cell.RenderPolyCount;
             var numPortalPolys = cell.PortalPolyCount;
-
-            // There's nothing to render
-            // Portal polys can be render polys (e.g. water) but we're ignoring them for now
-            if (numRenderPolys == 0 || numPortalPolys >= numPolys)
-            {
-                return;
-            }
-
             var solidPolys = numPolys - numPortalPolys;
+
             var cellIdxOffset = 0;
             for (var polyIdx = 0; polyIdx < numRenderPolys; polyIdx++)
             {
