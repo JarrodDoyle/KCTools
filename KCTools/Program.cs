@@ -14,7 +14,6 @@ using SharpGLTF.Memory;
 using SharpGLTF.Scenes;
 using SharpGLTF.Transforms;
 using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace KCTools;
 
@@ -430,12 +429,20 @@ public class RootCommand
                         return true;
                     case ".gif":
                     {
-                        using BinaryReader reader = new(stream, Encoding.UTF8, false);
-                        var gif = new GifDecoder(reader).GetImage(0);
-                        using var image = Image.LoadPixelData<Rgba32>(gif.GetRgbaBytes(), gif.Width, gif.Height);
-                        var memoryStream = new MemoryStream();
-                        image.SaveAsPng(memoryStream);
-                        memoryImage = new MemoryImage(memoryStream.GetBuffer());
+                        // Dark Engine gifs always use index 0 for transparency
+                        var gifImage = Image.Load(stream);
+                        var meta = gifImage.Frames[0].Metadata.GetGifMetadata();
+                        meta.HasTransparency = true;
+                        meta.TransparencyIndex = 0;
+
+                        // Annoyingly after changing gif meta we need to save and reload before we can save png with the
+                        // correct transparency
+                        var gifStream = new MemoryStream();
+                        var pngStream = new MemoryStream();
+                        gifImage.SaveAsGif(gifStream);
+                        gifStream.Position = 0;
+                        Image.Load(gifStream).SaveAsPng(pngStream);
+                        memoryImage = new MemoryImage(pngStream.GetBuffer());
                         return true;
                     }
                 }
