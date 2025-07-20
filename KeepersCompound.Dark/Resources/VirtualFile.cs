@@ -24,7 +24,8 @@ public class OsVirtualFile : BaseVirtualFile
 
     public override MemoryStream GetMemoryStream()
     {
-        return new MemoryStream(File.ReadAllBytes(OsPath));
+        var bytes = File.ReadAllBytes(OsPath);
+        return new MemoryStream(bytes, 0, bytes.Length, true, true);
     }
 }
 
