@@ -445,6 +445,7 @@ public class RootCommand
                     }
                 }
 
+                Log.Warning("Cannot load texture at virtual path ({VPath}). Unsupported file type.", virtualPath);
                 return false;
             }
         }
