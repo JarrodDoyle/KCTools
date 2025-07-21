@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text;
 using DotMake.CommandLine;
+using ImageMagick;
 using KeepersCompound.Dark;
 using KeepersCompound.Dark.Resources;
 using KeepersCompound.Formats.Model;
@@ -13,8 +14,6 @@ using SharpGLTF.Materials;
 using SharpGLTF.Memory;
 using SharpGLTF.Scenes;
 using SharpGLTF.Transforms;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.PixelFormats;
 
 namespace KCTools;
 
@@ -422,24 +421,48 @@ public class RootCommand
                 var ext = Path.GetExtension(virtualPath).ToLower();
                 switch (ext)
                 {
-                    case ".jpg":
-                    case ".jpeg":
                     case ".png":
                     case ".dds":
                         memoryImage = new MemoryImage(stream.GetBuffer());
                         return true;
+                    case ".pcx":
                     case ".gif":
                     {
-                        using BinaryReader reader = new(stream, Encoding.UTF8, false);
-                        var gif = new GifDecoder(reader).GetImage(0);
-                        using var image = Image.LoadPixelData<Rgba32>(gif.GetRgbaBytes(), gif.Width, gif.Height);
-                        var memoryStream = new MemoryStream();
-                        image.SaveAsPng(memoryStream);
-                        memoryImage = new MemoryImage(memoryStream.GetBuffer());
+                        using var image = new MagickImage(stream);
+                        var colorZero = image.GetColormapColor(0);
+                        if (colorZero != null)
+                        {
+                            image.Transparent(colorZero);
+                        }
+
+                        var pngStream = new MemoryStream();
+                        image.Format = MagickFormat.Png;
+                        image.Write(pngStream);
+                        memoryImage = new MemoryImage(pngStream.GetBuffer());
+                        return true;
+                    }
+                    case ".tga":
+                    {
+                        // TGA doesn't have a signature so we have to specify the format when loading from a stream
+                        using var image = new MagickImage(stream, MagickFormat.Tga);
+                        using var pngStream = new MemoryStream();
+                        image.Format = MagickFormat.Png;
+                        image.Write(pngStream);
+                        memoryImage = new MemoryImage(pngStream.GetBuffer());
+                        return true;
+                    }
+                    case ".bmp":
+                    {
+                        using var image = new MagickImage(stream, MagickFormat.Bmp);
+                        using var pngStream = new MemoryStream();
+                        image.Format = MagickFormat.Png;
+                        image.Write(pngStream);
+                        memoryImage = new MemoryImage(pngStream.GetBuffer());
                         return true;
                     }
                 }
 
+                Log.Warning("Cannot load texture at virtual path ({VPath}). Unsupported file type.", virtualPath);
                 return false;
             }
         }
