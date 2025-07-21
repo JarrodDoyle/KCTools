@@ -4,6 +4,7 @@ using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Resources;
 using KeepersCompound.Formats.Model;
+using KeepersCompound.Lighting.Vis;
 using Serilog;
 using TinyEmbree;
 
@@ -31,7 +32,6 @@ public class LightMapper
         public bool LightmappedWater;
         public SunSettings Sunlight;
         public uint AnimLightCutoff;
-        public bool FastPvs;
 
         public override string ToString()
         {
@@ -74,7 +74,7 @@ public class LightMapper
         });
     }
 
-    public void Light(bool pvs)
+    public void Light()
     {
         // TODO: Throw?
         if (!_mission.TryGetChunk<RendParams>("RENDPARAMS", out var rendParams) ||
@@ -112,7 +112,6 @@ public class LightMapper
             LightmappedWater = lmParams.LightmappedWater,
             Sunlight = sunlightSettings,
             AnimLightCutoff = lmParams.AnimLightCutoff,
-            FastPvs = pvs
         };
 
         if (settings.AnimLightCutoff > 0)
@@ -554,20 +553,8 @@ public class LightMapper
         });
         Log.Information("Mission has {c} lights", _lights.Count);
 
-        var pvs = new PotentiallyVisibleSet(worldRep.Cells);
         var visibleCellMap = new HashSet<int>[_lights.Count];
-
-        // Exact visibility doesn't use MightSee (yet?) so we only bother computing it if we're doing fast vis
-        if (settings.FastPvs)
-        {
-            Parallel.ForEach(lightCellMap, i =>
-            {
-                if (i != -1)
-                {
-                    pvs.ComputeCellMightSee(i);
-                }
-            });
-        }
+        var visGraph = VisGraphBuilder.FromCells(worldRep.Cells);
 
         Parallel.For(0, _lights.Count, i =>
         {
@@ -578,12 +565,7 @@ public class LightMapper
                 return;
             }
 
-            var visibleSet = settings.FastPvs switch
-            {
-                true => pvs.ComputeVisibilityFast(cellIdx),
-                false => pvs.ComputeVisibilityExact(_lights[i].Position, cellIdx, _lights[i].Radius)
-            };
-
+            var visibleSet = visGraph.ComputeVisibleNodes(cellIdx, _lights[i].Position, _lights[i].Radius);
             // Log.Information("Light {i} sees {c} cells", i, visibleSet.Count);
             visibleCellMap[i] = visibleSet;
         });
@@ -665,18 +647,9 @@ public class LightMapper
 
             if (overLit > 0)
             {
-                if (settings.FastPvs)
-                {
-                    Log.Warning(
-                        "{Count}/{CellCount} cells are overlit. Overlit cells can cause Object/Light Gem lighting issues. Try running without the --fast-pvs flag.",
-                        overLit, worldRep.Cells.Length);
-                }
-                else
-                {
-                    Log.Warning(
-                        "{Count}/{CellCount} cells are overlit. Overlit cells can cause Object/Light Gem lighting issues.",
-                        overLit, worldRep.Cells.Length);
-                }
+                Log.Warning(
+                    "{Count}/{CellCount} cells are overlit. Overlit cells can cause Object/Light Gem lighting issues.",
+                    overLit, worldRep.Cells.Length);
             }
 
             Log.Information("Max cell lights found ({Count}/96)", maxLights);

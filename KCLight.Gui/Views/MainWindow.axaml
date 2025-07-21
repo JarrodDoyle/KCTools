@@ -56,9 +56,6 @@
             <TextBlock Grid.Row="9" VerticalAlignment="Center" Text="Output Filename:" />
             <TextBox Grid.Row="10" Text="{Binding OutputName}" />
 
-            <TextBlock Grid.Row="12" VerticalAlignment="Center" Text="Simple Vis:" />
-            <CheckBox Grid.Row="13" IsChecked="{Binding FastPvs}" />
-
             <StackPanel Grid.Row="15" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
                 <Button Content="Run" Command="{Binding RunCommand}" />
                 <Button Content="Close" Command="{Binding Close}" />

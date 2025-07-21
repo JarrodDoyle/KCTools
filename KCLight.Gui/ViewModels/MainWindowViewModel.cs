@@ -31,7 +31,6 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
     [ObservableProperty] [NotifyCanExecuteChangedFor(nameof(RunCommand))]
     private string _outputName = "kc_lit";
 
-    [ObservableProperty] private bool _fastPvs;
     [ObservableProperty] private bool _validInstallPath;
     [ObservableProperty] private bool _validCampaignName;
     [ObservableProperty] private bool _validMissionName;
@@ -131,7 +130,7 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
                 }
 
                 var lightMapper = new LightMapper(_resources, mission);
-                lightMapper.Light(FastPvs);
+                lightMapper.Light();
                 if (_resources.TryGetFilePath(MissionName, out var misPath))
                 {
                     var folder = Path.GetDirectoryName(misPath);
