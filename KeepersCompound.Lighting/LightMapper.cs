@@ -32,7 +32,6 @@ public class LightMapper
         public bool LightmappedWater;
         public SunSettings Sunlight;
         public uint AnimLightCutoff;
-        public bool FastPvs;
 
         public override string ToString()
         {
@@ -75,7 +74,7 @@ public class LightMapper
         });
     }
 
-    public void Light(bool pvs)
+    public void Light()
     {
         // TODO: Throw?
         if (!_mission.TryGetChunk<RendParams>("RENDPARAMS", out var rendParams) ||
@@ -113,7 +112,6 @@ public class LightMapper
             LightmappedWater = lmParams.LightmappedWater,
             Sunlight = sunlightSettings,
             AnimLightCutoff = lmParams.AnimLightCutoff,
-            FastPvs = pvs
         };
 
         if (settings.AnimLightCutoff > 0)
@@ -649,18 +647,9 @@ public class LightMapper
 
             if (overLit > 0)
             {
-                if (settings.FastPvs)
-                {
-                    Log.Warning(
-                        "{Count}/{CellCount} cells are overlit. Overlit cells can cause Object/Light Gem lighting issues. Try running without the --fast-pvs flag.",
-                        overLit, worldRep.Cells.Length);
-                }
-                else
-                {
-                    Log.Warning(
-                        "{Count}/{CellCount} cells are overlit. Overlit cells can cause Object/Light Gem lighting issues.",
-                        overLit, worldRep.Cells.Length);
-                }
+                Log.Warning(
+                    "{Count}/{CellCount} cells are overlit. Overlit cells can cause Object/Light Gem lighting issues.",
+                    overLit, worldRep.Cells.Length);
             }
 
             Log.Information("Max cell lights found ({Count}/96)", maxLights);

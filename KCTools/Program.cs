@@ -63,9 +63,6 @@ public class RootCommand
         [CliOption(Description = "Name of output file excluding extension. Overwrites existing mission if not specified.")]
         public string? OutputName { get; set; } = null;
 
-        [CliOption(Description = "Use a simpler Light to Cell visibility calculation. Only use for debugging.")]
-        public bool SimpleVis { get; set; } = false;
-
         [CliOption(Description = "Report light configuration problems without performing any lighting.")]
         public bool Inspect { get; set; } = false;
 
@@ -115,7 +112,7 @@ public class RootCommand
                 }
                 else
                 {
-                    lightMapper.Light(SimpleVis);
+                    lightMapper.Light();
                     if (resources.TryGetFilePath(MissionName, out var misPath))
                     {
                         var folder = Path.GetDirectoryName(misPath);
