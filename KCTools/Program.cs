@@ -441,9 +441,18 @@ public class RootCommand
                         return true;
                     }
                     case ".tga":
+                    {
+                        // TGA doesn't have a signature so we have to specify the format when loading from a stream
+                        using var image = new MagickImage(stream, MagickFormat.Tga);
+                        using var pngStream = new MemoryStream();
+                        image.Format = MagickFormat.Png;
+                        image.Write(pngStream);
+                        memoryImage = new MemoryImage(pngStream.GetBuffer());
+                        return true;
+                    }
                     case ".bmp":
                     {
-                        using var image = new MagickImage(stream);
+                        using var image = new MagickImage(stream, MagickFormat.Bmp);
                         using var pngStream = new MemoryStream();
                         image.Format = MagickFormat.Png;
                         image.Write(pngStream);
