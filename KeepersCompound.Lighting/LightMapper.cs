@@ -4,6 +4,7 @@ using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Resources;
 using KeepersCompound.Formats.Model;
+using KeepersCompound.Lighting.Vis;
 using Serilog;
 using TinyEmbree;
 
@@ -554,20 +555,8 @@ public class LightMapper
         });
         Log.Information("Mission has {c} lights", _lights.Count);
 
-        var pvs = new PotentiallyVisibleSet(worldRep.Cells);
         var visibleCellMap = new HashSet<int>[_lights.Count];
-
-        // Exact visibility doesn't use MightSee (yet?) so we only bother computing it if we're doing fast vis
-        if (settings.FastPvs)
-        {
-            Parallel.ForEach(lightCellMap, i =>
-            {
-                if (i != -1)
-                {
-                    pvs.ComputeCellMightSee(i);
-                }
-            });
-        }
+        var visGraph = VisGraphBuilder.FromCells(worldRep.Cells);
 
         Parallel.For(0, _lights.Count, i =>
         {
@@ -578,12 +567,7 @@ public class LightMapper
                 return;
             }
 
-            var visibleSet = settings.FastPvs switch
-            {
-                true => pvs.ComputeVisibilityFast(cellIdx),
-                false => pvs.ComputeVisibilityExact(_lights[i].Position, cellIdx, _lights[i].Radius)
-            };
-
+            var visibleSet = visGraph.ComputeVisibleNodes(cellIdx, _lights[i].Position, _lights[i].Radius);
             // Log.Information("Light {i} sees {c} cells", i, visibleSet.Count);
             visibleCellMap[i] = visibleSet;
         });
