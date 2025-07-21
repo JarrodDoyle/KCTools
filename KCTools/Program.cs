@@ -421,8 +421,6 @@ public class RootCommand
                 var ext = Path.GetExtension(virtualPath).ToLower();
                 switch (ext)
                 {
-                    case ".jpg":
-                    case ".jpeg":
                     case ".png":
                     case ".dds":
                         memoryImage = new MemoryImage(stream.GetBuffer());
