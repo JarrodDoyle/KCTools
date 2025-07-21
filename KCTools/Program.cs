@@ -440,6 +440,16 @@ public class RootCommand
                         memoryImage = new MemoryImage(pngStream.GetBuffer());
                         return true;
                     }
+                    case ".tga":
+                    case ".bmp":
+                    {
+                        using var image = new MagickImage(stream);
+                        using var pngStream = new MemoryStream();
+                        image.Format = MagickFormat.Png;
+                        image.Write(pngStream);
+                        memoryImage = new MemoryImage(pngStream.GetBuffer());
+                        return true;
+                    }
                 }
 
                 Log.Warning("Cannot load texture at virtual path ({VPath}). Unsupported file type.", virtualPath);
