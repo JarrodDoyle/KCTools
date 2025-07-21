@@ -1,6 +1,7 @@
 using System.Numerics;
 using System.Text;
 using DotMake.CommandLine;
+using ImageMagick;
 using KeepersCompound.Dark;
 using KeepersCompound.Dark.Resources;
 using KeepersCompound.Formats.Model;
@@ -13,7 +14,6 @@ using SharpGLTF.Materials;
 using SharpGLTF.Memory;
 using SharpGLTF.Scenes;
 using SharpGLTF.Transforms;
-using SixLabors.ImageSharp;
 
 namespace KCTools;
 
@@ -427,19 +427,16 @@ public class RootCommand
                         return true;
                     case ".gif":
                     {
-                        // Dark Engine gifs always use index 0 for transparency
-                        var gifImage = Image.Load(stream);
-                        var meta = gifImage.Frames[0].Metadata.GetGifMetadata();
-                        meta.HasTransparency = true;
-                        meta.TransparencyIndex = 0;
+                        using var image = new MagickImage(stream);
+                        var colorZero = image.GetColormapColor(0);
+                        if (colorZero != null)
+                        {
+                            image.Transparent(colorZero);
+                        }
 
-                        // Annoyingly after changing gif meta we need to save and reload before we can save png with the
-                        // correct transparency
-                        var gifStream = new MemoryStream();
                         var pngStream = new MemoryStream();
-                        gifImage.SaveAsGif(gifStream);
-                        gifStream.Position = 0;
-                        Image.Load(gifStream).SaveAsPng(pngStream);
+                        image.Format = MagickFormat.Png;
+                        image.Write(pngStream);
                         memoryImage = new MemoryImage(pngStream.GetBuffer());
                         return true;
                     }
