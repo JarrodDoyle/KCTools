@@ -425,6 +425,7 @@ public class RootCommand
                     case ".dds":
                         memoryImage = new MemoryImage(stream.GetBuffer());
                         return true;
+                    case ".pcx":
                     case ".gif":
                     {
                         using var image = new MagickImage(stream);
