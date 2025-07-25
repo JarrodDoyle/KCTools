@@ -5,8 +5,8 @@ using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Resources;
 using KeepersCompound.Formats.Model;
 using KeepersCompound.Lighting.Vis;
+using KeepersCompound.Lighting.Scene;
 using Serilog;
-using TinyEmbree;
 
 namespace KeepersCompound.Lighting;
 
@@ -42,10 +42,8 @@ public class LightMapper
     private ResourceManager _resources;
     private DbFile _mission;
     private ObjectHierarchy _hierarchy;
-    private Raytracer _scene;
-    private Raytracer _sceneNoObj;
     private List<Light> _lights;
-    private CastSurfaceType[] _triangleTypeMap;
+    private SceneTracer _scene;
 
     public LightMapper(ResourceManager resources, DbFile mission)
     {
@@ -56,22 +54,13 @@ public class LightMapper
 
         VerifyRequiredChunksExist();
 
-        var (noObjMesh, fullMesh) = Timing.TimeStage("Build Raytracing Meshes", BuildMeshes);
-        _triangleTypeMap = fullMesh.TriangleSurfaceMap;
-        _sceneNoObj = Timing.TimeStage("Upload Raytracing Scenes", () =>
+        if (!_mission.TryGetChunk<BrList>("BRLIST", out var brList) ||
+            !_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
         {
-            var rt = new Raytracer();
-            rt.AddMesh(new TriangleMesh(noObjMesh.Vertices, noObjMesh.Indices));
-            rt.CommitScene();
-            return rt;
-        });
-        _scene = Timing.TimeStage("Upload Raytracing Scenes", () =>
-        {
-            var rt = new Raytracer();
-            rt.AddMesh(new TriangleMesh(fullMesh.Vertices, fullMesh.Indices));
-            rt.CommitScene();
-            return rt;
-        });
+            return;
+        }
+
+        _scene = Timing.TimeStage("Build tracing scenes", () => SceneTracerBuilder.Build(worldRep, brList, _hierarchy, _resources));
     }
 
     public void Light()
@@ -197,27 +186,6 @@ public class LightMapper
 
         Log.Warning("Failed to find GameSys");
         return new ObjectHierarchy(_mission);
-    }
-
-    private (Mesh, Mesh) BuildMeshes()
-    {
-        var meshBuilder = new MeshBuilder();
-
-        // TODO: Should this throw?
-        // TODO: Only do object polys if objcast lighting?
-        if (!_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep) ||
-            !_mission.TryGetChunk<BrList>("BRLIST", out var brList))
-        {
-            return (meshBuilder.Build(), meshBuilder.Build());
-        }
-
-        meshBuilder.AddWorldRepPolys(worldRep);
-        var noObjMesh = meshBuilder.Build();
-
-        meshBuilder.AddObjectPolys(brList, _hierarchy, _resources);
-        var fullMesh = meshBuilder.Build();
-
-        return (noObjMesh, fullMesh);
     }
 
     private void BuildLightList(Settings settings)
@@ -754,10 +722,6 @@ public class LightMapper
 
                         // TODO: Handle quad lit lights better. Right now we're computing two sets of points for every
                         // luxel. Maybe it's better to only compute if we encounter a quadlit light?
-                        // var tracePoints = GetTracePoints(pos, offsets, renderPoly.Center, plane, edgePlanes);
-                        // var quadTracePoints = settings.MultiSampling != SoftnessMode.Standard
-                        //     ? tracePoints
-                        //     : GetTracePoints(pos, quadOffsets, renderPoly.Center, plane, edgePlanes);
                         var tracePoints = GetTracePoints(pos, offsets, renderPoly.Center, planeMapper, v2ds);
                         var quadTracePoints = settings.MultiSampling != SoftnessMode.Standard
                             ? tracePoints
@@ -778,7 +742,7 @@ public class LightMapper
                                 for (var idx = 0; idx < targetPoints.Length; idx++)
                                 {
                                     var point = targetPoints[idx];
-                                    if (TraceSunRay(point, -settings.Sunlight.Direction))
+                                    if (_scene.TraceSun(point, -settings.Sunlight.Direction))
                                     {
                                         // Sunlight is a simpler lighting algorithm than normal lights so we can just
                                         // do it here
@@ -835,7 +799,7 @@ public class LightMapper
                                     continue;
                                 }
 
-                                if (!TraceOcclusion(_scene, light.Position, point))
+                                if (!_scene.TraceOcclusion(SceneTracerType.TerrainAndObjects, light.Position, point))
                                 {
                                     strength += targetWeights[idx] * light.StrengthAtPoint(point, plane,
                                         settings.AnimLightCutoff, settings.Attenuation);
@@ -917,80 +881,6 @@ public class LightMapper
         Vector3 basePosition,
         Vector3[] offsets,
         Vector3 polyCenter,
-        Plane polyPlane,
-        Plane[] edgePlanes)
-    {
-        polyCenter += polyPlane.Normal * 0.25f;
-
-        var tracePoints = new Vector3[offsets.Length];
-        for (var i = 0; i < offsets.Length; i++)
-        {
-            var offset = offsets[i];
-            var pos = basePosition + offset;
-
-            // If the center can see the target lightmap point then we can just straight use it.
-            // Note that the target may actually be on another poly, or floating in space over a ledge.
-            if (!TraceOcclusion(_sceneNoObj, polyCenter, pos))
-            {
-                tracePoints[i] = pos;
-                continue;
-            }
-
-            // If we can't see our target point from the center of the poly
-            // then we need to clip the point to slightly inside the poly
-            // and retrace to avoid two problems:
-            // 1. Darkened spots from lightmap pixels whose center is outside
-            //    the polygon but is partially contained in the polygon
-            // 2. Darkened spots from linear filtering of points outside the
-            //    polygon which have missed
-            //
-            // TODO: This can cause seams. The ideal solution here is to check if it lies on any other poly, or maybe check if it's "within" any cells.
-            foreach (var plane in edgePlanes)
-            {
-                var distFromPlane = MathUtils.DistanceFromPlane(plane, pos);
-                if (distFromPlane >= -MathUtils.Epsilon)
-                {
-                    // we're inside the plane :)
-                    continue;
-                }
-
-                var u = polyCenter - pos;
-                var w = pos - plane.Normal * -plane.D;
-
-                var d = Vector3.Dot(plane.Normal, u);
-                var n = -Vector3.Dot(plane.Normal, w);
-                var t = n / d;
-
-                pos += u * (t + MathUtils.Epsilon);
-            }
-
-            // After clipping, we can still be in a weird spot. So to fully resolve it we do a cast
-            if (TraceOcclusion(_sceneNoObj, polyCenter + polyPlane.Normal * 0.25f, pos))
-            {
-                var origin = polyCenter + polyPlane.Normal * 0.25f;
-                var direction = pos - origin;
-                var hitResult = _sceneNoObj.Trace(new Ray
-                {
-                    Origin = origin,
-                    Direction = Vector3.Normalize(direction)
-                });
-
-                if (hitResult)
-                {
-                    pos = hitResult.Position;
-                }
-            }
-
-            tracePoints[i] = pos;
-        }
-
-        return tracePoints;
-    }
-
-    private Vector3[] GetTracePoints(
-        Vector3 basePosition,
-        Vector3[] offsets,
-        Vector3 polyCenter,
         MathUtils.PlanePointMapper planeMapper,
         Vector2[] v2ds)
     {
@@ -1006,7 +896,7 @@ public class LightMapper
 
             // If the target lightmap point is in view of the center
             // then we can use it as-is. Using it straight fixes seams and such.
-            if (!TraceOcclusion(_sceneNoObj, polyCenter, pos))
+            if (!_scene.TraceOcclusion(SceneTracerType.Terrain, polyCenter, pos))
             {
                 tracePoints[i] = pos;
                 continue;
@@ -1025,17 +915,12 @@ public class LightMapper
             pos += planeMapper.Normal * MathUtils.Epsilon;
 
             // If the clipping fails, just say screw it and cast :(
-            if (TraceOcclusion(_sceneNoObj, polyCenter, pos))
+            if (_scene.TraceOcclusion(SceneTracerType.Terrain, polyCenter, pos))
             {
-                var hitResult = _sceneNoObj.Trace(new Ray
+                var hit = _scene.Trace(SceneTracerType.Terrain, polyCenter, pos - polyCenter);
+                if (hit)
                 {
-                    Origin = polyCenter,
-                    Direction = Vector3.Normalize(pos - polyCenter)
-                });
-
-                if (hitResult)
-                {
-                    pos = hitResult.Position;
+                    pos = hit.Position;
                 }
             }
 
@@ -1043,41 +928,6 @@ public class LightMapper
         }
 
         return tracePoints;
-    }
-
-    private static bool TraceOcclusion(Raytracer scene, Vector3 origin, Vector3 target,
-        float epsilon = MathUtils.Epsilon)
-    {
-        var direction = target - origin;
-        var ray = new Ray
-        {
-            Origin = origin,
-            Direction = Vector3.Normalize(direction)
-        };
-
-        // Epsilon is used here to avoid occlusion when origin lies exactly on a poly
-        return scene.IsOccluded(new ShadowRay(ray, direction.Length() - epsilon));
-    }
-
-    // TODO: direction should already be normalised here
-    private bool TraceSunRay(Vector3 origin, Vector3 direction)
-    {
-        var hitResult = _scene.Trace(new Ray
-        {
-            Origin = origin,
-            Direction = Vector3.Normalize(direction)
-        });
-
-        // If origin is very close to a wall, the initial trace to the sun sometimes misses the wall. Now that we have
-        // backface culling enabled in Embree, this can result in reaching a sky when we shouldn't.
-        // By doing another occlusion trace in the reverse direction we fix this. Any backfaces we passed through in
-        // the initial trace become frontfaces to be occluded by.
-        if (hitResult && !TraceOcclusion(_scene, hitResult.Position + hitResult.ErrorOffset * hitResult.Normal, origin))
-        {
-            return _triangleTypeMap[(int)hitResult.PrimId] == CastSurfaceType.Sky;
-        }
-
-        return false;
     }
 
     private void SetAnimLightCellMaps()

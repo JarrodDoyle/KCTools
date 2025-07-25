@@ -1,42 +1,27 @@
 using System.Numerics;
-using KeepersCompound.Dark;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Resources;
 using Serilog;
+using TinyEmbree;
 
-namespace KeepersCompound.Lighting;
+namespace KeepersCompound.Lighting.Scene;
 
-public enum CastSurfaceType
+public static class SceneTracerBuilder
 {
-    Solid,
-    Sky,
-    Object,
-    Air
-}
+    private const int SkyHack = 249;
 
-public class Mesh(
-    int triangleCount,
-    List<Vector3> vertices,
-    List<int> indices,
-    List<CastSurfaceType> triangleSurfaceMap)
-{
-    public int TriangleCount { get; } = triangleCount;
-    public Vector3[] Vertices { get; } = [..vertices];
-    public int[] Indices { get; } = [..indices];
-    public CastSurfaceType[] TriangleSurfaceMap { get; } = [..triangleSurfaceMap];
-}
-
-public class MeshBuilder
-{
-    private int _triangleCount = 0;
-    private readonly List<Vector3> _vertices = [];
-    private readonly List<int> _indices = [];
-    private readonly List<CastSurfaceType> _primSurfaceMap = [];
-
-    public void AddWorldRepPolys(WorldRep worldRep)
+    public static SceneTracer Build(
+        WorldRep worldRep,
+        BrList brushList,
+        ObjectHierarchy hierarchy,
+        ResourceManager resources)
     {
         var polyVertices = new List<Vector3>();
+        var vertices = new List<Vector3>();
+        var indices = new List<int>();
+        var surfaceMap = new List<SceneSurfaceType>();
+
         foreach (var cell in worldRep.Cells)
         {
             // We only care about polys representing solid terrain. We can't use RenderPolyCount because that includes
@@ -53,19 +38,18 @@ public class MeshBuilder
                     polyVertices.Add(cell.Vertices[cell.Indices[cellIdxOffset + i]]);
                 }
 
-                var primType = cell.RenderPolys[polyIdx].TextureId == 249 ? CastSurfaceType.Sky : CastSurfaceType.Solid;
-                AddPolygon(polyVertices, primType);
+                var primType = cell.RenderPolys[polyIdx].TextureId == SkyHack
+                    ? SceneSurfaceType.Sky
+                    : SceneSurfaceType.Terrain;
+                AddPolygon(vertices, indices, surfaceMap, polyVertices, primType);
                 cellIdxOffset += poly.VertexCount;
             }
         }
-    }
 
-    public void AddObjectPolys(
-        BrList brushList,
-        ObjectHierarchy hierarchy,
-        ResourceManager resources)
-    {
-        var polyVertices = new List<Vector3>();
+        var terrainTracer = new Raytracer();
+        terrainTracer.AddMesh(new TriangleMesh([..vertices], [..indices]));
+        terrainTracer.CommitScene();
+
         foreach (var brush in brushList.Brushes)
         {
             if (brush.Media != Media.Object)
@@ -84,14 +68,11 @@ public class MeshBuilder
             var joints = jointPosProp?.Positions ?? [0, 0, 0, 0, 0, 0];
             var castsShadows = (immobileProp?.Value ?? false) || (staticShadowProp?.Value ?? false);
             var renderMode = renderTypeProp?.RenderMode ?? RenderMode.Normal;
-
-            // TODO: Check which rendermodes cast shadows :)
             if (modelNameProp == null || !castsShadows || renderMode == RenderMode.CoronaOnly)
             {
                 continue;
             }
 
-            // Let's try and place an object :)
             if (!resources.TryGetModel(modelNameProp.Value, out var model))
             {
                 Log.Warning("Failed to find model file: {Name}", modelNameProp.Value);
@@ -105,7 +86,7 @@ public class MeshBuilder
             baseTransform *= Matrix4x4.CreateRotationZ(float.DegreesToRadians(brush.Angle.Z));
             baseTransform *= Matrix4x4.CreateTranslation(brush.Position - model.Center);
 
-            // for each polygon slam its vertices and indices :)
+            // For each polygon slam its vertices and indices :)
             var objTransforms = model.GetObjectTransforms(baseTransform, [..joints]);
             foreach (var poly in model.Polygons)
             {
@@ -125,31 +106,36 @@ public class MeshBuilder
                     polyVertices.Add(vertex);
                 }
 
-                AddPolygon(polyVertices, CastSurfaceType.Object);
+                AddPolygon(vertices, indices, surfaceMap, polyVertices, SceneSurfaceType.Object);
             }
         }
+
+        var terrainObjTracer = new Raytracer();
+        terrainObjTracer.AddMesh(new TriangleMesh([..vertices], [..indices]));
+        terrainObjTracer.CommitScene();
+
+        return new SceneTracer(terrainTracer, terrainObjTracer, surfaceMap);
     }
 
-    private void AddPolygon(List<Vector3> vertices, CastSurfaceType castSurfaceType)
+    private static void AddPolygon(
+        List<Vector3> vertices,
+        List<int> indices,
+        List<SceneSurfaceType> surfaceMap,
+        List<Vector3> polyVertices,
+        SceneSurfaceType polySurfaceType)
     {
-        var vertexCount = vertices.Count;
-        var indexOffset = _vertices.Count;
+        var vertexCount = polyVertices.Count;
+        var indexOffset = vertices.Count;
 
         // Polygons are n-sided, but fortunately they're convex so we can just do a fan triangulation
-        // Embree triangle winding order is reverse of LGS winding order, so we go (0, i+1, i) instead of (0, i+1, i)
-        _vertices.AddRange(vertices);
+        // Embree triangle winding order is reverse of LGS winding order, so we go (0, i+1, i) instead of (0, i, i+1)
+        vertices.AddRange(polyVertices);
         for (var i = 1; i < vertexCount - 1; i++)
         {
-            _indices.Add(indexOffset);
-            _indices.Add(indexOffset + i + 1);
-            _indices.Add(indexOffset + i);
-            _primSurfaceMap.Add(castSurfaceType);
-            _triangleCount++;
+            indices.Add(indexOffset);
+            indices.Add(indexOffset + i + 1);
+            indices.Add(indexOffset + i);
+            surfaceMap.Add(polySurfaceType);
         }
-    }
-
-    public Mesh Build()
-    {
-        return new Mesh(_triangleCount, _vertices, _indices, _primSurfaceMap);
     }
 }
