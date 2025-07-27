@@ -24,9 +24,23 @@ public class VisGraph
         var visitedNodes = new Stack<int>();
         visitedNodes.Push(startNode);
 
+        // Lists used in clipping. Pre-made here to avoid allocations each time we clip.
+        var clipDistances = new List<float>(32);
+        var clipSides = new List<VisGraphClipSide>(32);
+        var clipCounts = new[] { 0, 0, 0 };
+
         foreach (var edge in _nodes[startNode])
         {
-            ComputeVisibleNodesRecursive(visibleNodes, visitedNodes, position, maxRange, edge.Destination, edge.Poly);
+            ComputeVisibleNodesRecursive(
+                visibleNodes,
+                visitedNodes,
+                position,
+                maxRange,
+                edge.Destination,
+                edge.Poly,
+                clipDistances,
+                clipSides,
+                clipCounts);
         }
 
         return visibleNodes;
@@ -38,7 +52,10 @@ public class VisGraph
         Vector3 position,
         float maxRange,
         int currentNode,
-        VisGraphPoly passPoly)
+        VisGraphPoly passPoly,
+        List<float> clipDistances,
+        List<VisGraphClipSide> clipSides,
+        int[] clipCounts)
     {
         visitedNodes.Push(currentNode);
         visibleNodes.Add(currentNode);
@@ -68,15 +85,16 @@ public class VisGraph
             // This only checks is there is a point on the plane in range.
             // Could probably use poly center + radius to get an even better early out.
             if (visitedNodes.Contains(edge.Destination) ||
-                Math.Abs(MathUtils.DistanceFromNormalizedPlane(edge.Poly.Plane, position)) > maxRange)
+                (edge.Poly.Center - position).Length() > maxRange + edge.Poly.Radius ||
+                MathUtils.DistanceFromNormalizedPlane(edge.Poly.Plane, position) < -Epsilon)
             {
                 continue;
             }
 
-            var poly = edge.Poly with { Vertices = [..edge.Poly.Vertices] };
+            var poly = new VisGraphPoly(edge.Poly);
             foreach (var clipPlane in clipPlanes)
             {
-                ClipPolygonByPlane(ref poly, clipPlane);
+                ClipPolygonByPlane(poly, clipPlane, clipDistances, clipSides, clipCounts);
             }
 
             if (poly.Vertices.Count == 0)
@@ -84,13 +102,27 @@ public class VisGraph
                 continue;
             }
 
-            ComputeVisibleNodesRecursive(visibleNodes, visitedNodes, position, maxRange, edge.Destination, poly);
+            ComputeVisibleNodesRecursive(
+                visibleNodes,
+                visitedNodes,
+                position,
+                maxRange,
+                edge.Destination,
+                poly,
+                clipDistances,
+                clipSides,
+                clipCounts);
         }
 
         visitedNodes.Pop();
     }
 
-    private static void ClipPolygonByPlane(ref VisGraphPoly poly, Plane plane)
+    private static void ClipPolygonByPlane(
+        VisGraphPoly poly,
+        Plane plane,
+        List<float> clipDistances,
+        List<VisGraphClipSide> clipSides,
+        int[] clipCounts)
     {
         var vertexCount = poly.Vertices.Count;
         if (vertexCount == 0)
@@ -100,30 +132,33 @@ public class VisGraph
 
         // Firstly we want to tally up what side of the plane each point of the poly is on
         // This is used both to early out if nothing/everything is clipped, and to aid the clipping
-        var distances = new float[vertexCount];
-        var sides = new VisGraphClipSide[vertexCount];
-        var counts = new[] { 0, 0, 0 };
+        clipDistances.Clear();
+        clipSides.Clear();
+        clipCounts[0] = 0;
+        clipCounts[1] = 0;
+        clipCounts[2] = 0;
         for (var i = 0; i < vertexCount; i++)
         {
             var distance = MathUtils.DistanceFromPlane(plane, poly.Vertices[i]);
-            distances[i] = distance;
-            sides[i] = distance switch
+            var side = distance switch
             {
                 > Epsilon => VisGraphClipSide.Front,
                 < -Epsilon => VisGraphClipSide.Back,
                 _ => VisGraphClipSide.On,
             };
-            counts[(int)sides[i]]++;
+            clipDistances.Add(distance);
+            clipSides.Add(side);
+            clipCounts[(int)side]++;
         }
 
         // Everything is within the half-space, so we don't need to clip anything
-        if (counts[(int)VisGraphClipSide.Back] == 0 && counts[(int)VisGraphClipSide.On] != vertexCount)
+        if (clipCounts[(int)VisGraphClipSide.Back] == 0 && clipCounts[(int)VisGraphClipSide.On] != vertexCount)
         {
             return;
         }
 
         // Everything is outside the half-space, so we clip everything
-        if (counts[(int)VisGraphClipSide.Front] == 0)
+        if (clipCounts[(int)VisGraphClipSide.Front] == 0)
         {
             poly.Vertices.Clear();
             return;
@@ -135,11 +170,11 @@ public class VisGraph
             var i1 = (i + 1) % vertexCount;
             var v0 = poly.Vertices[i];
             var v1 = poly.Vertices[i1];
-            var side = sides[i];
-            var nextSide = sides[i1];
+            var side = clipSides[i];
+            var nextSide = clipSides[i1];
 
             // Vertices that are inside/on the half-space don't get clipped
-            if (sides[i] != VisGraphClipSide.Back)
+            if (clipSides[i] != VisGraphClipSide.Back)
             {
                 vertices.Add(v0);
             }
@@ -153,7 +188,7 @@ public class VisGraph
             }
 
             // This is how far along the vector v0 -> v1 the front/back crossover occurs
-            var frac = distances[i] / (distances[i] - distances[i1]);
+            var frac = clipDistances[i] / (clipDistances[i] - clipDistances[i1]);
             var splitVertex = v0 + frac * (v1 - v0);
             vertices.Add(splitVertex);
         }
