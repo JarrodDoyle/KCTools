@@ -86,7 +86,7 @@ public class VisGraph
             // Could probably use poly center + radius to get an even better early out.
             if (visitedNodes.Contains(edge.Destination) ||
                 (edge.Poly.Center - position).Length() > maxRange + edge.Poly.Radius ||
-                Math.Abs(MathUtils.DistanceFromNormalizedPlane(edge.Poly.Plane, position)) > maxRange)
+                MathUtils.DistanceFromNormalizedPlane(edge.Poly.Plane, position) < -Epsilon)
             {
                 continue;
             }
