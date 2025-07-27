@@ -85,15 +85,16 @@ public class VisGraph
             // This only checks is there is a point on the plane in range.
             // Could probably use poly center + radius to get an even better early out.
             if (visitedNodes.Contains(edge.Destination) ||
+                (edge.Poly.Center - position).Length() > maxRange + edge.Poly.Radius ||
                 Math.Abs(MathUtils.DistanceFromNormalizedPlane(edge.Poly.Plane, position)) > maxRange)
             {
                 continue;
             }
 
-            var poly = edge.Poly with { Vertices = [..edge.Poly.Vertices] };
+            var poly = new VisGraphPoly(edge.Poly);
             foreach (var clipPlane in clipPlanes)
             {
-                ClipPolygonByPlane(ref poly, clipPlane, clipDistances, clipSides, clipCounts);
+                ClipPolygonByPlane(poly, clipPlane, clipDistances, clipSides, clipCounts);
             }
 
             if (poly.Vertices.Count == 0)
@@ -117,7 +118,7 @@ public class VisGraph
     }
 
     private static void ClipPolygonByPlane(
-        ref VisGraphPoly poly,
+        VisGraphPoly poly,
         Plane plane,
         List<float> clipDistances,
         List<VisGraphClipSide> clipSides,
