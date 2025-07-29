@@ -35,14 +35,33 @@ public class ResourceManager
 
         for (var i = 0; i < context.LoadPaths.Count; i++)
         {
-            var path =  context.LoadPaths[^(i + 1)];
+            var path = context.LoadPaths[^(i + 1)];
             _vfs.Mount("", path, [".mis", ".gam", ".cow"], false);
         }
 
+        var resSearchOptions = new EnumerationOptions
+        {
+            MatchCasing = MatchCasing.CaseInsensitive
+        };
         for (var i = 0; i < context.ResPaths.Count; i++)
         {
-            var path =  context.ResPaths[^(i + 1)];
-            _vfs.Mount("", path, true);
+            var resPath = context.ResPaths[^(i + 1)];
+            Log.Debug("ResPath: {p}", resPath);
+            foreach (var path in Directory.GetFileSystemEntries(resPath, "*", resSearchOptions))
+            {
+                var name = Path.GetFileName(path).ToLower();
+                switch (name)
+                {
+                    case "fam":
+                    case "obj":
+                        _vfs.Mount(name, path, true);
+                        break;
+                    case "fam.crf":
+                    case "obj.crf":
+                        _vfs.Mount("", path, true);
+                        break;
+                }
+            }
         }
 
         if (campaignName != null && context.Fms.Contains(campaignName))
@@ -115,7 +134,7 @@ public class ResourceManager
 
     public bool TryGetObjectTextureVirtualPath(string name, out string virtualPath)
     {
-        foreach (var prefix in new []{"obj/txt16", "obj/txt"})
+        foreach (var prefix in new[] { "obj/txt16", "obj/txt" })
         {
             foreach (var ext in _textureExtensions)
             {
