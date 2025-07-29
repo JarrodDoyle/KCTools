@@ -160,6 +160,7 @@ public class VirtualFileSystem
             }
             else
             {
+                virtualPath = NormaliseFilePath(Path.Join(mountPoint, virtualPath));
                 RegisterParentDirectories(virtualPath);
                 _files[virtualPath] = new OsVirtualFile(virtualPath, osPath);
             }
@@ -186,6 +187,7 @@ public class VirtualFileSystem
             }
             else if (validExtensions.Contains(ext))
             {
+                virtualPath = NormaliseFilePath(Path.Join(mountPoint, virtualPath));
                 RegisterParentDirectories(virtualPath);
                 _files[virtualPath] = new OsVirtualFile(virtualPath, osPath);
             }
