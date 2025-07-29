@@ -66,7 +66,23 @@ public class ResourceManager
 
         if (campaignName != null && context.Fms.Contains(campaignName))
         {
-            _vfs.Mount("", Path.Join(context.FmsDir, campaignName), true);
+            var fmDir = Path.Join(context.FmsDir, campaignName);
+            _vfs.Mount("", fmDir, [".mis", ".gam", ".cow"], false);
+            foreach (var path in Directory.GetFileSystemEntries(fmDir, "*", resSearchOptions))
+            {
+                var name = Path.GetFileName(path).ToLower();
+                switch (name)
+                {
+                    case "fam":
+                    case "obj":
+                        _vfs.Mount(name, path, true);
+                        break;
+                    case "fam.crf":
+                    case "obj.crf":
+                        _vfs.Mount("", path, true);
+                        break;
+                }
+            }
         }
 
         DbFileNames = _vfs.GetFilesInFolder("", [".mis", ".cow", ".gam"], false);
