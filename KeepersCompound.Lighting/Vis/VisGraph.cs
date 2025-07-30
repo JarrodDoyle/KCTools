@@ -79,7 +79,13 @@ public class VisGraph
             clipPlanes.Add(plane);
         }
 
-        // foreach (var targetEdgeIdx in _graph[currentNode].EdgeIndices)
+        // This basically only happens if the pass poly is tiny
+        if (clipPlanes.Count == 0)
+        {
+            visitedNodes.Pop();
+            return;
+        }
+
         foreach (var edge in _nodes[currentNode])
         {
             // This only checks is there is a point on the plane in range.
