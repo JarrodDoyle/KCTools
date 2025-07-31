@@ -79,14 +79,22 @@ public class VisGraph
             clipPlanes.Add(plane);
         }
 
-        // foreach (var targetEdgeIdx in _graph[currentNode].EdgeIndices)
+        // This basically only happens if the pass poly is tiny
+        if (clipPlanes.Count == 0)
+        {
+            visitedNodes.Pop();
+            return;
+        }
+
         foreach (var edge in _nodes[currentNode])
         {
             // This only checks is there is a point on the plane in range.
             // Could probably use poly center + radius to get an even better early out.
-            if (visitedNodes.Contains(edge.Destination) ||
-                (edge.Poly.Center - position).Length() > maxRange + edge.Poly.Radius ||
-                MathUtils.DistanceFromNormalizedPlane(edge.Poly.Plane, position) < -Epsilon)
+            var dist = MathUtils.DistanceFromNormalizedPlane(edge.Poly.Plane, position);
+            if (dist < -Epsilon ||
+                dist > maxRange ||
+                visitedNodes.Contains(edge.Destination) ||
+                (edge.Poly.Center - position).Length() > maxRange + edge.Poly.Radius )
             {
                 continue;
             }
