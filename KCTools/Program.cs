@@ -415,52 +415,46 @@ public class RootCommand
                     return false;
                 }
 
+                MagickImage? magickImage = null;
                 var ext = Path.GetExtension(virtualPath).ToLower();
                 switch (ext)
                 {
                     case ".png":
                     case ".dds":
-                        memoryImage = new MemoryImage(stream.GetBuffer());
-                        return true;
+                    case ".bmp":
+                        magickImage = new MagickImage(stream);
+                        break;
                     case ".pcx":
                     case ".gif":
                     {
-                        using var image = new MagickImage(stream);
-                        var colorZero = image.GetColormapColor(0);
+                        magickImage = new MagickImage(stream);
+                        var colorZero = magickImage.GetColormapColor(0);
                         if (colorZero != null)
                         {
-                            image.Transparent(colorZero);
+                            magickImage.Transparent(colorZero);
                         }
 
-                        var pngStream = new MemoryStream();
-                        image.Format = MagickFormat.Png;
-                        image.Write(pngStream);
-                        memoryImage = new MemoryImage(pngStream.GetBuffer());
-                        return true;
+                        break;
                     }
                     case ".tga":
                     {
                         // TGA doesn't have a signature so we have to specify the format when loading from a stream
-                        using var image = new MagickImage(stream, MagickFormat.Tga);
-                        using var pngStream = new MemoryStream();
-                        image.Format = MagickFormat.Png;
-                        image.Write(pngStream);
-                        memoryImage = new MemoryImage(pngStream.GetBuffer());
-                        return true;
-                    }
-                    case ".bmp":
-                    {
-                        using var image = new MagickImage(stream, MagickFormat.Bmp);
-                        using var pngStream = new MemoryStream();
-                        image.Format = MagickFormat.Png;
-                        image.Write(pngStream);
-                        memoryImage = new MemoryImage(pngStream.GetBuffer());
-                        return true;
+                        magickImage = new MagickImage(stream, MagickFormat.Tga);
+                        break;
                     }
                 }
 
-                Log.Warning("Cannot load texture at virtual path ({VPath}). Unsupported file type.", virtualPath);
-                return false;
+                if (magickImage == null)
+                {
+                    Log.Warning("Cannot load texture at virtual path ({VPath}). Unsupported file type.", virtualPath);
+                    return false;
+                }
+
+                using var pngStream = new MemoryStream();
+                magickImage.Format = MagickFormat.Png;
+                magickImage.Write(pngStream);
+                memoryImage = new MemoryImage(pngStream.GetBuffer());
+                return true;
             }
         }
     }
