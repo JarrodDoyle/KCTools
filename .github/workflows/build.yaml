@@ -23,7 +23,7 @@ jobs:
         run: dotnet publish KCTools/KCTools.csproj -c Release --property:PublishDir=${{ github.workspace }}/release/dromed/Tools/KCTools -r win-x64 --nologo
       - name: Copy DromEd Scripts
         shell: pwsh
-        run: Copy-Item -Path DromedScripts\* -Destination ${{ github.workspace }}\release\dromed -Recurse -Force
+        run: Copy-Item -Path EditorScripts\* -Destination ${{ github.workspace }}\release\dromed -Recurse -Force
       - name: Upload DromEd
         uses: actions/upload-artifact@v4
         with:
