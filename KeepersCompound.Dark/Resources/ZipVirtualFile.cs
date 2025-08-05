@@ -2,33 +2,6 @@ using System.IO.Compression;
 
 namespace KeepersCompound.Dark.Resources;
 
-public abstract class BaseVirtualFile
-{
-    public string VirtualPath { get; init; }
-    public abstract MemoryStream GetMemoryStream();
-
-    protected BaseVirtualFile(string virtualPath)
-    {
-        VirtualPath = virtualPath;
-    }
-}
-
-public class OsVirtualFile : BaseVirtualFile
-{
-    public string OsPath { get; init; }
-
-    public OsVirtualFile(string virtualPath, string osPath) : base(virtualPath)
-    {
-        OsPath = osPath;
-    }
-
-    public override MemoryStream GetMemoryStream()
-    {
-        var bytes = File.ReadAllBytes(OsPath);
-        return new MemoryStream(bytes, 0, bytes.Length, true, true);
-    }
-}
-
 public class ZipVirtualFile : BaseVirtualFile
 {
     private readonly ZipArchive _archive;
