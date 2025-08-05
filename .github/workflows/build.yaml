@@ -27,7 +27,7 @@ jobs:
       - name: Upload DromEd
         uses: actions/upload-artifact@v4
         with:
-          name: dromed_win_64
+          name: dromed_win_x64
           path: |
             ${{ github.workspace }}/release/dromed/
             !${{ github.workspace }}/release/dromed/Tools/KCTools/*.pdb
