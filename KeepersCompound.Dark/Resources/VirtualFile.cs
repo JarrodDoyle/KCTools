@@ -2,17 +2,6 @@ using System.IO.Compression;
 
 namespace KeepersCompound.Dark.Resources;
 
-public abstract class BaseVirtualFile
-{
-    public string VirtualPath { get; init; }
-    public abstract MemoryStream GetMemoryStream();
-
-    protected BaseVirtualFile(string virtualPath)
-    {
-        VirtualPath = virtualPath;
-    }
-}
-
 public class OsVirtualFile : BaseVirtualFile
 {
     public string OsPath { get; init; }
