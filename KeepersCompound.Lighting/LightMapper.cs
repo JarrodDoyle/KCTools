@@ -90,12 +90,13 @@ public class LightMapper
         }
 
         // TODO: lmParams LightmappedWater doesn't mean the game will actually *use* the lightmapped water hmm
+        var lmFormat = worldRep.DataHeader.LightmapFormat;
         var settings = new Settings
         {
-            Hdr = worldRep.DataHeader.LightmapFormat == 2,
+            Hdr = lmFormat == 2,
             AmbientLight = [..ambientLight],
-            Attenuation = lmParams.Attenuation,
-            Saturation = lmParams.Saturation,
+            Attenuation = lmFormat == 0 ? 1.0f : lmParams.Attenuation,
+            Saturation = lmFormat == 0 ? 1.0f : lmParams.Saturation,
             MultiSampling = lmParams.ShadowSoftness,
             MultiSamplingCenterWeight = lmParams.CenterWeight,
             LightmappedWater = lmParams.LightmappedWater,
