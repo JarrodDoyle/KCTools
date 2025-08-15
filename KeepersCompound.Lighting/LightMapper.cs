@@ -349,8 +349,10 @@ public class LightMapper
         var propModelName = _hierarchy.GetProperty<PropLabel>(id, "P$ModelName");
         var propJointPos = _hierarchy.GetProperty<PropJointPos>(id, "P$JointPos");
 
+        // We don't want to modify the base property info!
         propLightColor ??= new PropLightColor { Hue = 0, Saturation = 0 };
-        propLightColor.Saturation *= settings.Saturation;
+        var lightHue = propLightColor.Hue;
+        var lightSaturation = propLightColor.Saturation * settings.Saturation;
 
         var joints = propJointPos?.Positions ?? [0, 0, 0, 0, 0, 0];
 
@@ -389,7 +391,7 @@ public class LightMapper
             var light = new Light
             {
                 Position = propAnimLight.Offset,
-                Color = Utils.HsbToRgb(propLightColor.Hue, propLightColor.Saturation, propAnimLight.MaxBrightness),
+                Color = Utils.HsbToRgb(lightHue, lightSaturation, propAnimLight.MaxBrightness),
                 Brightness = propAnimLight.MaxBrightness,
                 InnerRadius = propAnimLight.InnerRadius,
                 Radius = propAnimLight.Radius,
@@ -419,7 +421,7 @@ public class LightMapper
             var light = new Light
             {
                 Position = propLight.Offset,
-                Color = Utils.HsbToRgb(propLightColor.Hue, propLightColor.Saturation, propLight.Brightness),
+                Color = Utils.HsbToRgb(lightHue, lightSaturation, propLight.Brightness),
                 Brightness = propLight.Brightness,
                 InnerRadius = propLight.InnerRadius,
                 Radius = propLight.Radius,
@@ -434,7 +436,7 @@ public class LightMapper
                 var spot = new Light
                 {
                     Position = light.Position,
-                    Color = Utils.HsbToRgb(propLightColor.Hue, propLightColor.Saturation, propSpotAmb.SpotBrightness),
+                    Color = Utils.HsbToRgb(lightHue, lightSaturation, propSpotAmb.SpotBrightness),
                     Brightness = propSpotAmb.SpotBrightness,
                     InnerRadius = light.InnerRadius,
                     Radius = light.Radius,
