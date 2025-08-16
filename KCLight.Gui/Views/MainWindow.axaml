@@ -58,6 +58,7 @@
 
             <StackPanel Grid.Row="15" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
                 <Button Content="Run" Command="{Binding RunCommand}" />
+                <Button Content="Reload" Command="{Binding ReloadGameDirectoryCommand}" ToolTip.Tip="Reloads game directory. Use if new campaigns/missions/models have been added."/>
                 <Button Content="Close" Command="{Binding Close}" />
             </StackPanel>
         </Grid>

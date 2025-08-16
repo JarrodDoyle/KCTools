@@ -176,6 +176,15 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
         }
     }
 
+    [RelayCommand]
+    private void ReloadGameDirectory()
+    {
+        if (InitialiseContext())
+        {
+            InitialiseCampaignResources();
+        }
+    }
+
     public void Close()
     {
         if (Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktopApp)
