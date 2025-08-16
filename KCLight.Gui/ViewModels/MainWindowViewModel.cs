@@ -43,27 +43,15 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
 
     partial void OnInstallPathChanged(string value)
     {
-        _context = new InstallContext(InstallPath);
-        CampaignNames = new ObservableCollection<string>(_context.Fms);
-        ValidInstallPath = _context.Valid;
-        if (!ValidInstallPath)
+        if (InitialiseContext())
         {
-            Log.Error("Invalid install context");
-            return;
+            InitialiseCampaignResources();
         }
-
-        ValidateCampaignName();
-        _resources.Initialise(_context, ValidCampaignName ? CampaignName : null);
-        UpdateMissionNames();
-        ValidateMissionName();
     }
 
     partial void OnCampaignNameChanged(string value)
     {
-        ValidateCampaignName();
-        _resources.Initialise(_context, ValidCampaignName ? CampaignName : null);
-        UpdateMissionNames();
-        ValidateMissionName();
+        InitialiseCampaignResources();
     }
 
     partial void OnMissionNameChanged(string value)
@@ -101,6 +89,28 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
                 MissionNames.Add(fileName.ToLower());
             }
         }
+    }
+
+    private void InitialiseCampaignResources()
+    {
+        ValidateCampaignName();
+        _resources.Initialise(_context, ValidCampaignName ? CampaignName : null);
+        UpdateMissionNames();
+        ValidateMissionName();
+    }
+
+    private bool InitialiseContext()
+    {
+        _context = new InstallContext(InstallPath);
+        CampaignNames = new ObservableCollection<string>(_context.Fms);
+        ValidInstallPath = _context.Valid;
+        if (!ValidInstallPath)
+        {
+            Log.Error("Invalid install context");
+            return false;
+        }
+
+        return true;
     }
 
     [RelayCommand(CanExecute = nameof(ValidMissionName))]
