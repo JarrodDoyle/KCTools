@@ -39,7 +39,7 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
     [ObservableProperty] private ObservableCollection<string> _logLines = [];
 
     private InstallContext? _context;
-    private ResourceManager _resources = new();
+    private readonly ResourceManager _resources = new();
 
     partial void OnInstallPathChanged(string value)
     {
