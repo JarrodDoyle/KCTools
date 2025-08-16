@@ -179,7 +179,7 @@ public class RootCommand
             public string? ModelName { get; set; } = null;
 
             [CliOption(
-                Description = "Folder to output exported models to. If not set models will be exported alongside the original."
+                Description = "Folder to output exported models to. If not set models will be exported to a `models` directory alongside kctools."
             )]
             public string? OutputDirectory { get; set; } = null;
 
