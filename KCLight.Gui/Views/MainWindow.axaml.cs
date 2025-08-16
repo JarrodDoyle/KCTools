@@ -16,6 +16,17 @@ public partial class MainWindow : Window
 
         MissionNameBox.GotFocus += OnAutocompleteFocus;
         CampaignNameBox.GotFocus += OnAutocompleteFocus;
+        MissionNameBox.PointerReleased += OnAutocompleteReleased;
+        CampaignNameBox.PointerReleased += OnAutocompleteReleased;
+    }
+
+    private static void OnAutocompleteReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is AutoCompleteBox { IsKeyboardFocusWithin: true, IsDropDownOpen: false, IsPointerOver: true } box)
+        {
+            box.IsDropDownOpen = true;
+            e.Handled = true;
+        }
     }
 
     private static void OnAutocompleteFocus(object? sender, GotFocusEventArgs e)
