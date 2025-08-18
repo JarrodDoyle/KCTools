@@ -79,7 +79,6 @@ public class VisGraph
             clipPlanes.Add(plane);
         }
 
-        // foreach (var targetEdgeIdx in _graph[currentNode].EdgeIndices)
         foreach (var edge in _nodes[currentNode])
         {
             // This only checks is there is a point on the plane in range.
@@ -88,7 +87,7 @@ public class VisGraph
             if (dist < -Epsilon ||
                 dist > maxRange ||
                 visitedNodes.Contains(edge.Destination) ||
-                (edge.Poly.Center - position).Length() > maxRange + edge.Poly.Radius )
+                (edge.Poly.Center - position).Length() > maxRange + edge.Poly.Radius)
             {
                 continue;
             }
