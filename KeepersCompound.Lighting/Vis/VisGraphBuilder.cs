@@ -14,7 +14,10 @@ public static class VisGraphBuilder
 
             // If a cell is "blocks vision" flagged, we can never see out of it
             // We can see into it though, so we still want the edges coming in
-            if ((cell.Flags & 8) != 0)
+            // Note that we actually check "can_block_vision" because active blocking
+            // isn't set until a state check is triggered by going in-game/reloading
+            // the mission
+            if ((cell.Flags & 16) != 0)
             {
                 graph.AddNode(edges);
                 continue;
