@@ -72,7 +72,9 @@ public class BrList : IChunk
         public sbyte PointSelected;
         public sbyte UseFlag;
         public sbyte GroupId;
+        public byte RoomEax;
         public TexInfo[] Txs;
+        private readonly byte[] _unknown;
 
         public Brush(BinaryReader reader)
         {
@@ -95,7 +97,8 @@ public class BrList : IChunk
             PointSelected = reader.ReadSByte();
             UseFlag = reader.ReadSByte();
             GroupId = reader.ReadSByte();
-            reader.ReadBytes(4);
+            RoomEax = reader.ReadByte();
+            _unknown = reader.ReadBytes(3);
             if ((sbyte)Media >= 0)
             {
                 Txs = new TexInfo[NumFaces];
@@ -131,7 +134,8 @@ public class BrList : IChunk
             writer.Write(PointSelected);
             writer.Write(UseFlag);
             writer.Write(GroupId);
-            writer.Write(new byte[4]);
+            writer.Write(RoomEax);
+            writer.Write(_unknown);
             foreach (var info in Txs)
             {
                 info.Write(writer);
