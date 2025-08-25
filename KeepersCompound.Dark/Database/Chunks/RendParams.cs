@@ -27,6 +27,9 @@ public class RendParams : IChunk
     public float GlobalAiVisBias;
     public float[] AmbientZoneAiVisBiases;
 
+    private byte[] _unknown1;
+    private byte[] _unknown2;
+
     public void ReadData(BinaryReader reader, DbFile.TableOfContents.Entry entry)
     {
         Palette = reader.ReadNullString(16);
@@ -38,9 +41,9 @@ public class RendParams : IChunk
         SunlightHue = reader.ReadSingle();
         SunlightSaturation = reader.ReadSingle();
         SunlightBrightness = reader.ReadSingle();
-        reader.ReadBytes(24);
+        _unknown1 = reader.ReadBytes(24);
         ViewDistance = reader.ReadSingle();
-        reader.ReadBytes(12);
+        _unknown2 = reader.ReadBytes(12);
         AmbientLightZones = new Vector3[8];
         for (var i = 0; i < AmbientLightZones.Length; i++)
         {
@@ -66,9 +69,9 @@ public class RendParams : IChunk
         writer.Write(SunlightHue);
         writer.Write(SunlightSaturation);
         writer.Write(SunlightBrightness);
-        writer.Write(new byte[24]);
+        writer.Write(_unknown1);
         writer.Write(ViewDistance);
-        writer.Write(new byte[12]);
+        writer.Write(_unknown2);
         foreach (var lightZone in AmbientLightZones)
         {
             writer.WriteVec3(lightZone);
