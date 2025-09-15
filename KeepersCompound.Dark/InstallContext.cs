@@ -59,6 +59,7 @@ public class InstallContext
             var name = Path.GetFileName(dir);
             Fms.Add(name);
         }
+
         Fms.Sort();
 
         Valid = true;
@@ -94,50 +95,53 @@ public class InstallContext
             }
         }
 
-        // TODO: Verify we found cam/cam_ext/cam_mod
-        var camExtLines = File.ReadAllLines(configPaths[(int)ConfigFile.CamExt]);
-        var camLines = File.ReadAllLines(configPaths[(int)ConfigFile.Cam]);
-
-        bool FindCamVar(string varName, out string value, string defaultValue = "")
+        // We can only search for other config files if these exist (really only Cam is required, but both to be safe)
+        if (configPaths[(int)ConfigFile.Cam] != null && configPaths[(int)ConfigFile.CamExt] != null)
         {
-            return FindConfigVar(camExtLines, varName, out value, defaultValue) ||
-                   FindConfigVar(camLines, varName, out value, defaultValue);
-        }
+            var camExtLines = File.ReadAllLines(configPaths[(int)ConfigFile.CamExt]);
+            var camLines = File.ReadAllLines(configPaths[(int)ConfigFile.Cam]);
 
-        FindCamVar("include_path", out var includePath, "./");
-
-        if (!FindCamVar("game", out var gameName))
-        {
-            Log.Error("`game` not specified in Cam/CamExt");
-            return false;
-        }
-
-        if (!FindCamVar($"{gameName}_include_install_cfg", out var installCfgName))
-        {
-            Log.Error("Install config file path not specified in Cam/CamExt");
-            return false;
-        }
-
-        if (!FindCamVar("include_user_cfg", out var userCfgName))
-        {
-            Log.Error("User config file path not specified in Cam/CamExt");
-            return false;
-        }
-
-        includePath = PathUtils.ConvertSeparator(includePath);
-        includePath = Path.Join(installPath, includePath);
-        if (!Directory.Exists(includePath))
-        {
-            Log.Error("Include path specified in Cam/CamExt does not exist: {IncludePath}", includePath);
-            return false;
-        }
-
-        foreach (var path in Directory.GetFiles(includePath, "*.cfg", searchOptions))
-        {
-            var name = Path.GetFileName(path).ToLower();
-            if (name == installCfgName.ToLower())
+            bool FindCamVar(string varName, out string value, string defaultValue = "")
             {
-                configPaths[(int)ConfigFile.Install] = path;
+                return FindConfigVar(camExtLines, varName, out value, defaultValue) ||
+                       FindConfigVar(camLines, varName, out value, defaultValue);
+            }
+
+            FindCamVar("include_path", out var includePath, "./");
+
+            if (!FindCamVar("game", out var gameName))
+            {
+                Log.Error("`game` not specified in Cam/CamExt");
+                return false;
+            }
+
+            if (!FindCamVar($"{gameName}_include_install_cfg", out var installCfgName))
+            {
+                Log.Error("Install config file path not specified in Cam/CamExt");
+                return false;
+            }
+
+            if (!FindCamVar("include_user_cfg", out var userCfgName))
+            {
+                Log.Error("User config file path not specified in Cam/CamExt");
+                return false;
+            }
+
+            includePath = PathUtils.ConvertSeparator(includePath);
+            includePath = Path.Join(installPath, includePath);
+            if (!Directory.Exists(includePath))
+            {
+                Log.Error("Include path specified in Cam/CamExt does not exist: {IncludePath}", includePath);
+                return false;
+            }
+
+            foreach (var path in Directory.GetFiles(includePath, "*.cfg", searchOptions))
+            {
+                var name = Path.GetFileName(path).ToLower();
+                if (name == installCfgName.ToLower())
+                {
+                    configPaths[(int)ConfigFile.Install] = path;
+                }
             }
         }
 
