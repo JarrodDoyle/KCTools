@@ -267,6 +267,7 @@ public class ModelFileParser : IBinaryParser<ModelFile>
             Center = center,
             Transparency = transparency,
             SelfIllumination = selfIllumination,
+            AuxMaterialSize = auxMaterialSize,
             JointCount = jointCount,
             VCallCount = vCallCount,
             VertexPositions = vertexPositions,

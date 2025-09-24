@@ -55,6 +55,11 @@ public class ModelFile
     public required bool SelfIllumination { get; set; }
 
     /// <summary>
+    /// How large is the auxillary material data. Only supported on version 4.
+    /// </summary>
+    public required uint AuxMaterialSize { get; set; }
+
+    /// <summary>
     /// Number of joints/parameters. DromEd can only interact with the first 6.
     /// </summary>
     public required ushort JointCount { get; set; }
