@@ -253,7 +253,7 @@ public class ModelFileParser : IBinaryParser<ModelFile>
             }
         }
 
-        reader.BaseStream.Seek(vertexNormalOffset, SeekOrigin.Begin);
+        reader.BaseStream.Seek(nodeOffset, SeekOrigin.Begin);
         var bspNodeData = reader.ReadBytes((int)(modelSize - nodeOffset)).ToList();
 
         return new ModelFile
