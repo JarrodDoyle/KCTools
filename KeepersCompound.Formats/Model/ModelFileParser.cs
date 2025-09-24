@@ -282,8 +282,186 @@ public class ModelFileParser : IBinaryParser<ModelFile>
         };
     }
 
-    public void Write(BinaryWriter writer)
+    public void Write(BinaryWriter writer, ModelFile modelFile)
     {
-        throw new NotImplementedException();
+        writer.WriteNullString("LGMD", 4);
+        writer.Write(modelFile.Version);
+        writer.WriteNullString(modelFile.Name, 8);
+        writer.Write(modelFile.Radius);
+        writer.Write(modelFile.MaxPolygonRadius);
+        writer.WriteVec3(modelFile.MaxBounds);
+        writer.WriteVec3(modelFile.MinBounds);
+        writer.WriteVec3(modelFile.Center);
+
+        var maxPolyIndex = 0;
+        foreach (var polygon in modelFile.Polygons)
+        {
+            if (polygon.Index > maxPolyIndex)
+            {
+                maxPolyIndex = polygon.Index;
+            }
+        }
+
+        writer.Write((ushort)(maxPolyIndex + 1));
+        writer.Write((ushort)modelFile.VertexPositions.Count);
+        writer.Write(modelFile.JointCount);
+        writer.Write((byte)modelFile.Materials.Count);
+        writer.Write(modelFile.VCallCount);
+        writer.Write((byte)modelFile.VHots.Count);
+        writer.Write((byte)modelFile.Objects.Count);
+
+        var offsetsOffset = writer.BaseStream.Position;
+        writer.Write(new byte[40]);
+
+        if (modelFile.Version == 4)
+        {
+            writer.Write((modelFile.Transparency ? 0x1 : 0) + (modelFile.SelfIllumination ? 0x2 : 0));
+            writer.Write(new byte[4]);
+            writer.Write(modelFile.AuxMaterialSize);
+        }
+
+        var objectsOffset = writer.BaseStream.Position;
+        foreach (var obj in modelFile.Objects)
+        {
+            writer.WriteNullString(obj.Name, 8);
+            writer.Write((byte)obj.JointType);
+            writer.Write(obj.JointIndex);
+            writer.Write(obj.JointMinValue);
+            writer.Write(obj.JointMaxValue);
+            writer.Write(obj.Transform.M11);
+            writer.Write(obj.Transform.M12);
+            writer.Write(obj.Transform.M13);
+            writer.Write(obj.Transform.M21);
+            writer.Write(obj.Transform.M22);
+            writer.Write(obj.Transform.M23);
+            writer.Write(obj.Transform.M31);
+            writer.Write(obj.Transform.M32);
+            writer.Write(obj.Transform.M33);
+            writer.Write(obj.Transform.M41);
+            writer.Write(obj.Transform.M42);
+            writer.Write(obj.Transform.M43);
+            writer.Write(obj.ChildObjectIndex);
+            writer.Write(obj.SiblingObjectIndex);
+            writer.Write(obj.VHotStartIndex);
+            writer.Write(obj.VHotCount);
+            writer.Write(obj.VertexPositionStartIndex);
+            writer.Write(obj.VertexPositionCount);
+            writer.Write(obj.VertexNormalStartIndex);
+            writer.Write(obj.VertexNormalCount);
+            writer.Write(obj.FaceNormalStartIndex);
+            writer.Write(obj.FaceNormalCount);
+            writer.Write(obj.BspNodeStartIndex);
+            writer.Write(obj.BspNodeCount);
+        }
+        
+        var materialsOffset = writer.BaseStream.Position;
+        foreach (var material in modelFile.Materials)
+        {
+            writer.WriteNullString(material.Name, 16);
+            writer.Write((byte)material.Type);
+            writer.Write(material.Slot);
+            writer.Write(material.Color.ToArgb());
+            writer.Write(material.PaletteIndex);
+        }
+        
+        var auxMaterialsOffset = writer.BaseStream.Position;
+        if (modelFile.Version == 4)
+        {
+            foreach (var material in modelFile.Materials)
+            {
+                writer.Write(material.Transparency);
+                writer.Write(material.SelfIllumination);
+                if (modelFile.AuxMaterialSize == 16)
+                {
+                    writer.WriteVec2(material.MaxTexelSize);
+                }
+            }
+        }
+        
+        var vertexUvsOffset = writer.BaseStream.Position;
+        foreach (var vertexUv in modelFile.VertexUvs)
+        {
+            writer.WriteVec2(vertexUv);
+        }
+        
+        var vhotsOffset = writer.BaseStream.Position;
+        foreach (var vhot in modelFile.VHots)
+        {
+            writer.Write((int)vhot.Type);
+            writer.WriteVec3(vhot.Position);
+        }
+        
+        var vertexPositionsOffset = writer.BaseStream.Position;
+        foreach (var vertexPosition in modelFile.VertexPositions)
+        {
+            writer.WriteVec3(vertexPosition);
+        }
+        
+        var vertexNormalsOffset = writer.BaseStream.Position;
+        foreach (var vertexNormal in modelFile.VertexNormals)
+        {
+            writer.Write(vertexNormal.MaterialId);
+            writer.Write(vertexNormal.VertexId);
+            writer.Write((uint)((ushort)((int)(vertexNormal.Normal.X * 256) << 6) << 16) +
+                         (uint)((ushort)((int)(vertexNormal.Normal.Y * 256) << 6) << 6) +
+                         (uint)((ushort)((int)(vertexNormal.Normal.Z * 256) << 6) >> 4));
+        }
+        
+        var faceNormalsOffset = writer.BaseStream.Position;
+        foreach (var faceNormal in modelFile.FaceNormals)
+        {
+            writer.WriteVec3(faceNormal);
+        }
+        
+        var polygonsOffset = writer.BaseStream.Position;
+        foreach (var polygon in modelFile.Polygons)
+        {
+            writer.Write(polygon.Index);
+            writer.Write(polygon.Data);
+            writer.Write((byte)((byte)polygon.Type + ((byte)polygon.ColorType << 5) + (polygon.UseVertexNormals ? 0x18 : 0)));
+            writer.Write((byte)polygon.VertexIndices.Count);
+            writer.Write(polygon.NormalIndex);
+            writer.Write(polygon.NormalDistance);
+            foreach (var vertexIndex in polygon.VertexIndices)
+            {
+                writer.Write(vertexIndex.PositionIndex);
+            }
+        
+            foreach (var vertexIndex in polygon.VertexIndices)
+            {
+                writer.Write(vertexIndex.NormalIndex);
+            }
+        
+            if (polygon.Type == ModelPolygonType.Textured)
+            {
+                foreach (var vertexIndex in polygon.VertexIndices)
+                {
+                    writer.Write(vertexIndex.UvIndex);
+                }
+            }
+        
+            if (modelFile.Version == 4)
+            {
+                writer.Write(polygon.MaterialId);
+            }
+        }
+        
+        var bspNodesOffset = writer.BaseStream.Position;
+        writer.Write(modelFile.BspNodeData.ToArray());
+        
+        var modelFileSize = writer.BaseStream.Position;
+        writer.BaseStream.Seek(offsetsOffset, SeekOrigin.Begin);
+        writer.Write((int)objectsOffset);
+        writer.Write((int)materialsOffset);
+        writer.Write((int)vertexUvsOffset);
+        writer.Write((int)vhotsOffset);
+        writer.Write((int)vertexPositionsOffset);
+        writer.Write((int)vertexNormalsOffset);
+        writer.Write((int)faceNormalsOffset);
+        writer.Write((int)polygonsOffset);
+        writer.Write((int)bspNodesOffset);
+        writer.Write((int)modelFileSize);
+        writer.BaseStream.Seek(4, SeekOrigin.Current);
+        writer.Write((int)auxMaterialsOffset);
     }
 }
