@@ -54,7 +54,7 @@ public class ResourceManager
 
         Log.Information("Loading campaign: {CampaignName}", campaignName);
         var fmDir = Path.Join(Context.FmsDir, campaignName);
-        _fmResources.Add(campaignName, LoadResources("FMs/{campaignName}", [fmDir], [fmDir]));
+        _fmResources.Add(campaignName, LoadResources($"FMs/{campaignName}", [fmDir], [fmDir]));
         return true;
     }
 
