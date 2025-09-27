@@ -38,8 +38,8 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
     [ObservableProperty] private ObservableCollection<string> _missionNames = [];
     [ObservableProperty] private ObservableCollection<string> _logLines = [];
 
-    private InstallContext? _context;
-    private readonly ResourceManager _resources = new();
+    private InstallContext _context = null!;
+    private ResourceManager _resources = null!;
 
     partial void OnInstallPathChanged(string value)
     {
@@ -76,7 +76,7 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
             return;
         }
 
-        var dbNames = _resources.DbFileNames.ToList();
+        var dbNames = _resources.GetDbFileNames().ToList();
         dbNames.Sort();
 
         MissionNames.Clear();
@@ -94,7 +94,10 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
     private void InitialiseCampaignResources()
     {
         ValidateCampaignName();
-        _resources.Initialise(_context, ValidCampaignName ? CampaignName : null);
+        if (ValidCampaignName)
+        {
+            _resources.SetActiveCampaign(CampaignName);
+        }
         UpdateMissionNames();
         ValidateMissionName();
     }
@@ -102,6 +105,7 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
     private bool InitialiseContext()
     {
         _context = new InstallContext(InstallPath);
+        _resources = new ResourceManager(_context);
         CampaignNames = new ObservableCollection<string>(_context.Fms);
         ValidInstallPath = _context.Valid;
         if (!ValidInstallPath)
@@ -116,18 +120,11 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
     [RelayCommand(CanExecute = nameof(ValidMissionName))]
     private async Task RunAsync()
     {
-        var outputName = OutputName;
         await Task.Run(() =>
         {
             Timing.Reset();
             Timing.TimeStage("Total", () =>
             {
-                if (_context == null)
-                {
-                    Log.Error("Invalid install context");
-                    return;
-                }
-
                 var (loaded, mission) = Timing.TimeStage("Load Mission File", () =>
                 {
                     var loaded = _resources.TryGetDbFile(MissionName, out var mission);
@@ -141,7 +138,8 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
 
                 var lightMapper = new LightMapper(_resources, mission);
                 lightMapper.Light();
-                if (_resources.TryGetFilePath(MissionName, out var misPath))
+                if (_resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
+                    _resources.TryGetFilePath(virtualMisPath, out var misPath))
                 {
                     var folder = Path.GetDirectoryName(misPath);
                     var misName = OutputName + Path.GetExtension(misPath);

@@ -91,8 +91,13 @@ public class RootCommand
                     Timing.TimeStage("Auto-detecting Campaign", CampaignFromDromedLog);
                 }
 
-                var resources = new ResourceManager();
-                Timing.TimeStage("Resource Path Gathering", () => resources.Initialise(context, CampaignName));
+                CampaignName ??= "";
+                var resources = Timing.TimeStage("Resource Path Gathering", () =>
+                {
+                    var resourceManager = new ResourceManager(context);
+                    resourceManager.SetActiveCampaign(CampaignName);
+                    return resourceManager;
+                });
 
                 var (loaded, mission) = Timing.TimeStage("Load Mission File", () =>
                 {
@@ -113,7 +118,8 @@ public class RootCommand
                 else
                 {
                     lightMapper.Light();
-                    if (resources.TryGetFilePath(MissionName, out var misPath))
+                    if (resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
+                        resources.TryGetFilePath(virtualMisPath, out var misPath))
                     {
                         var folder = Path.GetDirectoryName(misPath);
                         var misName = OutputName != null ? OutputName + Path.GetExtension(misPath) : MissionName;
@@ -197,8 +203,13 @@ public class RootCommand
                     return;
                 }
 
-                var resources = new ResourceManager();
-                Timing.TimeStage("Resource Path Gathering", () => resources.Initialise(context, CampaignName));
+                CampaignName ??= "";
+                var resources = Timing.TimeStage("Resource Path Gathering", () =>
+                {
+                    var resourceManager = new ResourceManager(context);
+                    resourceManager.SetActiveCampaign(CampaignName);
+                    return resourceManager;
+                });
 
                 var modelCount = 0;
                 if (ModelName != null)
@@ -208,7 +219,7 @@ public class RootCommand
                 }
                 else
                 {
-                    foreach (var modelName in resources.ModelNames)
+                    foreach (var modelName in resources.GetModelNames())
                     {
                         ExportModel(resources, modelName);
                         modelCount++;

@@ -137,7 +137,7 @@ public class VirtualFileSystem
         {
             var ext = Path.GetExtension(path);
             return extensions.Contains(ext, StringComparer.OrdinalIgnoreCase);
-        }).ToHashSet();
+        }).ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     private void MountDirectory(string mountPoint, string path, bool recursive)
