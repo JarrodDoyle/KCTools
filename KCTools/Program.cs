@@ -439,12 +439,8 @@ public class RootCommand
                     case ".gif":
                     {
                         magickImage = new MagickImage(stream);
-                        var colorZero = magickImage.GetColormapColor(0);
-                        if (colorZero != null)
-                        {
-                            magickImage.Transparent(colorZero);
-                        }
-
+                        magickImage.Alpha(AlphaOption.Set);
+                        magickImage.SetColormapColor(0, MagickColors.Transparent);
                         break;
                     }
                     case ".tga":
