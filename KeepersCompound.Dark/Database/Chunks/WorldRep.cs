@@ -653,6 +653,9 @@ public class WorldRep : IChunk
             }
         }
 
+        // From modders_notes.txt
+        public const int MaxAnimMapCount = 49152;
+
         public int LightCount;
         public int DynamicLightCount;
         public int AnimMapCount;

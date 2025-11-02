@@ -960,6 +960,12 @@ public class LightMapper
             prop.LightTableMapIndex = (ushort)worldRep.LightingTable.AnimMapCount;
             prop.CellsReached = (ushort)animCellMaps.Count;
 
+            if (worldRep.LightingTable.AnimMapCount + animCellMaps.Count >= WorldRep.LightTable.MaxAnimMapCount)
+            {
+                prop.CellsReached = 0;
+                continue;
+            }
+
             worldRep.LightingTable.AnimCellMaps.AddRange(animCellMaps);
             worldRep.LightingTable.AnimMapCount += animCellMaps.Count;
         }
