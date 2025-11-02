@@ -214,7 +214,7 @@ public class RootCommand
                 var modelCount = 0;
                 if (ModelName != null)
                 {
-                    ExportModel(resources, ModelName);
+                    ExportModel(resources, Path.GetFileNameWithoutExtension(ModelName));
                     modelCount++;
                 }
                 else
