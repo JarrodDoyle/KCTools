@@ -963,6 +963,7 @@ public class LightMapper
             if (worldRep.LightingTable.AnimMapCount + animCellMaps.Count >= WorldRep.LightTable.MaxAnimMapCount)
             {
                 prop.CellsReached = 0;
+                Log.Warning("AnimCellMapping reached. Light {Id} cannot update runtime lightmap levels.", light.ObjId);
                 continue;
             }
 
