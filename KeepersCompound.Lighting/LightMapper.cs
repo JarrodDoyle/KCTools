@@ -278,6 +278,30 @@ public class LightMapper
                 _lights.RemoveAt(i);
             }
 
+            if (light.Hue < 0 || light.Hue > 1.0)
+            {
+                if (light.ObjId != -1)
+                {
+                    Log.Warning("Object {Id}: Hue {Hue} outside of range <0-1>.", light.ObjId, light.Hue);
+                }
+                else
+                {
+                    Log.Warning("Brush at {Position}: Hue {Hue} outside of range <0-1>.", light.Position, light.Hue);
+                }
+            }
+
+            if (light.Saturation < 0 || light.Saturation > 1.0)
+            {
+                if (light.ObjId != -1)
+                {
+                    Log.Warning("Object {Id}: Saturation {Saturation} outside of range <0-1>.", light.ObjId, light.Saturation);
+                }
+                else
+                {
+                    Log.Warning("Brush at {Position}: Saturation {Saturation} outside of range <0-1>.", light.Position, light.Saturation);
+                }
+            }
+
             if (light.Radius == float.MaxValue)
             {
                 if (light.ObjId != -1)
@@ -327,6 +351,8 @@ public class LightMapper
             Position = brush.Position,
             Color = Utils.HsbToRgb(sz.Y, saturation, brightness),
             Brightness = brightness,
+            Hue = sz.Y,
+            Saturation = saturation,
             Radius = float.MaxValue,
             R2 = float.MaxValue,
             SpotlightInnerAngle = -1f,
@@ -393,6 +419,8 @@ public class LightMapper
                 Position = propAnimLight.Offset,
                 Color = Utils.HsbToRgb(lightHue, lightSaturation, propAnimLight.MaxBrightness),
                 Brightness = propAnimLight.MaxBrightness,
+                Hue = lightHue,
+                Saturation = lightSaturation,
                 InnerRadius = propAnimLight.InnerRadius,
                 Radius = propAnimLight.Radius,
                 R2 = propAnimLight.Radius * propAnimLight.Radius,
@@ -423,6 +451,8 @@ public class LightMapper
                 Position = propLight.Offset,
                 Color = Utils.HsbToRgb(lightHue, lightSaturation, propLight.Brightness),
                 Brightness = propLight.Brightness,
+                Hue = lightHue,
+                Saturation = lightSaturation,
                 InnerRadius = propLight.InnerRadius,
                 Radius = propLight.Radius,
                 R2 = propLight.Radius * propLight.Radius,
@@ -438,6 +468,8 @@ public class LightMapper
                     Position = light.Position,
                     Color = Utils.HsbToRgb(lightHue, lightSaturation, propSpotAmb.SpotBrightness),
                     Brightness = propSpotAmb.SpotBrightness,
+                    Hue = lightHue,
+                    Saturation = lightSaturation,
                     InnerRadius = light.InnerRadius,
                     Radius = light.Radius,
                     R2 = light.R2,
