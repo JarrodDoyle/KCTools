@@ -8,6 +8,8 @@ public class Light
     public Vector3 Position;
     public Vector3 Color;
     public float Brightness;
+    public float Hue;
+    public float Saturation;
     public float InnerRadius;
     public float Radius;
     public float R2;
