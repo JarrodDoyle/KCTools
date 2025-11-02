@@ -960,6 +960,13 @@ public class LightMapper
             prop.LightTableMapIndex = (ushort)worldRep.LightingTable.AnimMapCount;
             prop.CellsReached = (ushort)animCellMaps.Count;
 
+            if (worldRep.LightingTable.AnimMapCount + animCellMaps.Count >= WorldRep.LightTable.MaxAnimMapCount)
+            {
+                prop.CellsReached = 0;
+                Log.Warning("AnimCellMapping reached. Light {Id} cannot update runtime lightmap levels.", light.ObjId);
+                continue;
+            }
+
             worldRep.LightingTable.AnimCellMaps.AddRange(animCellMaps);
             worldRep.LightingTable.AnimMapCount += animCellMaps.Count;
         }
