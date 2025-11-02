@@ -681,21 +681,6 @@ public class LightMapper
                     topLeft + xDir + yDir
                 ]);
 
-                // Log.Information("Poly plane: {X}x + {Y}y + {Z}z + {D} = 0", plane.Normal.X, plane.Normal.Y, plane.Normal.Z, plane.D);
-                var edgePlanes = new Plane[poly.VertexCount];
-                for (var i = 0; i < poly.VertexCount; i++)
-                {
-                    var v0 = cell.Vertices[cell.Indices[cellIdxOffset + i]];
-                    var v1 = cell.Vertices[cell.Indices[cellIdxOffset + (i + 1) % poly.VertexCount]];
-
-                    var dir = Vector3.Normalize(v1 - v0);
-                    var edgePlaneNormal = Vector3.Cross(dir, plane.Normal);
-                    var edgePlaneDistance = -Vector3.Dot(edgePlaneNormal, v0);
-                    var edgePlane = new Plane(edgePlaneNormal, edgePlaneDistance);
-                    edgePlanes[i] = edgePlane;
-                    // Log.Information("Edge plane: {X}x + {Y}y + {Z}z + {D} = 0", edgePlane.Normal.X, edgePlane.Normal.Y, edgePlane.Normal.Z, edgePlane.D);
-                }
-
                 // Used for clipping points to poly
                 var vs = new Vector3[poly.VertexCount];
                 for (var i = 0; i < poly.VertexCount; i++)
