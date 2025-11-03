@@ -349,7 +349,9 @@ public class LightMapper
         }
 
         var overLit = 0;
+        var overAnimLit = 0;
         var maxLights = 0;
+        var maxAnimLights = 0;
         for (var i = 0; i < worldRep.Cells.Length; i++)
         {
             var cell = worldRep.Cells[i];
@@ -359,9 +361,20 @@ public class LightMapper
                 overLit++;
             }
 
+            if (cell.AnimLightCount > 32)
+            {
+                Log.Warning("Cell {Id} sees too many animated lights ({Count}/32)", i, cell.AnimLightCount);
+                overAnimLit++;
+            }
+
             if (cell.LightIndexCount > maxLights)
             {
                 maxLights = cell.LightIndexCount - 1;
+            }
+
+            if (cell.AnimLightCount > maxAnimLights)
+            {
+                maxAnimLights = cell.AnimLightCount;
             }
         }
 
@@ -372,7 +385,15 @@ public class LightMapper
                 overLit, worldRep.Cells.Length);
         }
 
+        if (overAnimLit > 0)
+        {
+            Log.Warning(
+                "{Count}/{CellCount} cells see too many animated lights. When a cell sees too many animated lights some of them will be missing lightmaps.",
+                overAnimLit, worldRep.Cells.Length);
+        }
+
         Log.Information("Max cell lights found ({Count}/96)", maxLights);
+        Log.Information("Max cell anim lights found ({Count}/32)", maxAnimLights);
     }
 
     private void ProcessBrushLight(BrList.Brush brush, Settings settings)
