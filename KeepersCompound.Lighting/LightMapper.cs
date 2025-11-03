@@ -117,6 +117,7 @@ public class LightMapper
         Timing.TimeStage("Set Light Visibility", () => SetCellLightIndices(settings));
         Timing.TimeStage("Trace Scene", () => TraceScene(settings));
         Timing.TimeStage("Update AnimLight Cell Mapping", SetAnimLightCellMaps);
+        Timing.TimeStage("Post-Light Validation", PostLightValidation);
 
         // We always do object casting, so it's nice to let dromed know that :)
         lmParams.ShadowType = LmParams.LightingMode.Objcast;
@@ -338,6 +339,61 @@ public class LightMapper
         {
             Log.Warning("Mission contains {Count} infinite lights", infinite);
         }
+    }
+
+    private void PostLightValidation()
+    {
+        if (!_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
+        {
+            return;
+        }
+
+        var overLit = 0;
+        var overAnimLit = 0;
+        var maxLights = 0;
+        var maxAnimLights = 0;
+        for (var i = 0; i < worldRep.Cells.Length; i++)
+        {
+            var cell = worldRep.Cells[i];
+            if (cell.LightIndexCount > 97)
+            {
+                Log.Warning("Cell {Id} sees too many lights ({Count}/96)", i, cell.LightIndices[0]);
+                overLit++;
+            }
+
+            if (cell.AnimLightCount > 32)
+            {
+                Log.Warning("Cell {Id} sees too many animated lights ({Count}/32)", i, cell.AnimLightCount);
+                overAnimLit++;
+            }
+
+            if (cell.LightIndexCount > maxLights)
+            {
+                maxLights = cell.LightIndexCount - 1;
+            }
+
+            if (cell.AnimLightCount > maxAnimLights)
+            {
+                maxAnimLights = cell.AnimLightCount;
+            }
+        }
+
+        if (overLit > 0)
+        {
+            Log.Warning(
+                "{Count}/{CellCount} cells are overlit. Overlit cells can cause Object/Light Gem lighting issues.",
+                overLit, worldRep.Cells.Length);
+        }
+
+        if (overAnimLit > 0)
+        {
+            Log.Warning(
+                "{Count}/{CellCount} cells see too many animated lights. When a cell sees too many animated lights some of them will be missing lightmaps.",
+                overAnimLit, worldRep.Cells.Length);
+        }
+
+        Log.Information("Max cell lights found ({Count}/96)", maxLights);
+        Log.Information("Max cell anim lights found ({Count}/32)", maxAnimLights);
     }
 
     private void ProcessBrushLight(BrList.Brush brush, Settings settings)
@@ -625,38 +681,7 @@ public class LightMapper
                 cell.LightIndices.Add((ushort)light.LightTableIndex);
                 cell.LightIndices[0]++;
             }
-
-            if (cell.LightIndexCount > 97)
-            {
-                Log.Warning("Cell {Id} sees too many lights ({Count})", i, cell.LightIndices[0]);
-            }
         });
-
-        {
-            var overLit = 0;
-            var maxLights = 0;
-            foreach (var cell in worldRep.Cells)
-            {
-                if (cell.LightIndexCount > 97)
-                {
-                    overLit++;
-                }
-
-                if (cell.LightIndexCount > maxLights)
-                {
-                    maxLights = cell.LightIndexCount - 1;
-                }
-            }
-
-            if (overLit > 0)
-            {
-                Log.Warning(
-                    "{Count}/{CellCount} cells are overlit. Overlit cells can cause Object/Light Gem lighting issues.",
-                    overLit, worldRep.Cells.Length);
-            }
-
-            Log.Information("Max cell lights found ({Count}/96)", maxLights);
-        }
     }
 
     private void TraceScene(Settings settings)

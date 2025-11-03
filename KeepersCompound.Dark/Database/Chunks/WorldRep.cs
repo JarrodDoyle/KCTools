@@ -241,10 +241,12 @@ public class WorldRep : IChunk
                 return bytes;
             }
 
-            public void AddLight(int layer, int x, int y, float r, float g, float b)
+            public bool AddLight(int layer, int x, int y, float r, float g, float b)
             {
-                ArgumentOutOfRangeException.ThrowIfLessThan(layer, 0, nameof(layer));
-                ArgumentOutOfRangeException.ThrowIfGreaterThan(layer, 32, nameof(layer));
+                if (layer is < 0 or > 32)
+                {
+                    return false;
+                }
 
                 while (layer >= Layers)
                 {
@@ -274,9 +276,10 @@ public class WorldRep : IChunk
                 }
 
                 _litLayers[layer] = true;
+                return true;
             }
 
-            public void AddLight(int layer, int x, int y, Vector3 color, float strength, bool hdr)
+            public bool AddLight(int layer, int x, int y, Vector3 color, float strength, bool hdr)
             {
                 if (hdr)
                 {
@@ -294,7 +297,7 @@ public class WorldRep : IChunk
                     c /= ratio;
                 }
 
-                AddLight(layer, x, y, c.X, c.Y, c.Z);
+                return AddLight(layer, x, y, c.X, c.Y, c.Z);
             }
 
             public void Reset(Vector3 ambientLight, bool hdr)
