@@ -1,0 +1,12 @@
+[package]
+name = "kctools"
+version = "1.3.0"
+edition = "2024"
+
+[lib]
+crate-type=["cdylib"]
+
+[dependencies]
+kc-osm = "0.0.1"
+windows-core = "0.62.2"
+
