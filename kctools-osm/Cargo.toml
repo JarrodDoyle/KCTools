@@ -10,3 +10,6 @@ crate-type=["cdylib"]
 kc-osm = "0.0.1"
 windows-core = "0.62.2"
 
+[profile.release]
+lto = true
+strip = true
