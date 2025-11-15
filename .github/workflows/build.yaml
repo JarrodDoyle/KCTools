@@ -24,6 +24,20 @@ jobs:
       - name: Copy DromEd Scripts
         shell: pwsh
         run: Copy-Item -Path EditorScripts\* -Destination ${{ github.workspace }}\release\dromed -Recurse -Force
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: i686-pc-windows-gnu
+      - name: Setup MinGW
+        uses: egor-tensin/setup-mingw@v2
+        with:
+          version: 12.2.0
+          platform: x86
+      - name: Build OSM
+        run: cd kctools-osm && cargo build -r && cd ../
+      - name: Copy OSM
+        shell: pwsh
+        run: Copy-Item -Path kctools-osm\target\i686-pc-windows-gnu\release\kctools.dll -Destination ${{ github.workspace }}\release\dromed\kctools.osm
       - name: Upload DromEd
         uses: actions/upload-artifact@v4
         with:
