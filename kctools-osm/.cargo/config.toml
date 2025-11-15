@@ -1,0 +1,3 @@
+[build]
+target = "i686-pc-windows-gnu"
+rustflags = "-C link-arg=exports.def"

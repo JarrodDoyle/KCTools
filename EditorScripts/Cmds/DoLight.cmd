@@ -8,7 +8,7 @@ hilight_add_prop HTHModeOverride
 
 eval world set old_world %s
 save_cow KCLight.cow
-run_sys_wait "Tools\KCTools\run_sys_wait_light.cmd"
+script_load kctools.osm
 load_file KCLight.cow
 eval old_world set world %s
 
