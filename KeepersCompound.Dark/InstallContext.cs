@@ -196,7 +196,8 @@ public class InstallContext
 
         foreach (var path in paths.Split('+'))
         {
-            var dir = Path.Join(rootPath, PathUtils.ConvertSeparator(path));
+            var cPath = PathUtils.ConvertSeparator(path);
+            var dir = Path.IsPathFullyQualified(cPath) ? cPath : Path.Join(rootPath, cPath);
             if (!Directory.Exists(dir))
             {
                 Log.Warning("Install config references non-existent {VarName}: {Path}", varName, dir);
