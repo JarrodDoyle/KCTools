@@ -18,6 +18,11 @@ public class ObjectHierarchy
             Properties = new Dictionary<string, Property>();
         }
 
+        public bool IsConcrete()
+        {
+            return ObjectId >= 0;
+        }
+
         public T? GetProperty<T>(string propName) where T : Property
         {
             if (Properties.TryGetValue(propName, out var prop))
@@ -111,6 +116,7 @@ public class ObjectHierarchy
             }
         }
 
+        AddProp<PropPosition>("P$Position");
         AddProp<PropLabel>("P$ModelName");
         AddProp<PropVector>("P$Scale");
         AddProp<PropRenderType>("P$RenderTyp");
@@ -127,6 +133,8 @@ public class ObjectHierarchy
         AddProp<PropLightColor>("P$LightColo");
         AddProp<PropSpotlight>("P$Spotlight");
         AddProp<PropSpotlightAndAmbient>("P$SpotAmb");
+        AddProp<PropRotDoor>("P$RotDoor");
+        AddProp<PropTransDoor>("P$TransDoor");
     }
 
     // TODO: Work out if there's some nice way to automatically decide if we inherit
@@ -155,5 +163,19 @@ public class ObjectHierarchy
         }
 
         return null;
+    }
+
+    public List<int> GetConcreteObjectsWithPropDirect(string propName)
+    {
+        var objects = new List<int>();
+        foreach (var (id, obj) in _objects)
+        {
+            if (obj.IsConcrete() && obj.Properties.ContainsKey(propName))
+            {
+                objects.Add(id);
+            }
+        }
+
+        return objects;
     }
 }

@@ -111,6 +111,7 @@ public class LightMapper
                 settings.AnimLightCutoff);
         }
 
+        Timing.TimeStage("Set Door Blocking Flags", SetCellBlockingFlags);
         Timing.TimeStage("Gather Lights", () => BuildLightList(settings));
         Timing.TimeStage("Validate Lights", () => ValidateLightConfigurations(settings));
         Timing.TimeStage("Build Lighting Table", BuildLightingTable);
@@ -188,6 +189,70 @@ public class LightMapper
 
         Log.Warning("Failed to find GameSys");
         return new ObjectHierarchy(_mission);
+    }
+
+    /// <summary>
+    /// Ensures "blocks_vision" and "can_block_vision" are set on cells containing doors.
+    /// </summary>
+    private void SetCellBlockingFlags()
+    {
+        if (!_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
+        {
+            return;
+        }
+
+        var doorPositions = new List<Vector3>();
+        var rotDoors = _hierarchy.GetConcreteObjectsWithPropDirect("P$RotDoor");
+        foreach (var id in rotDoors)
+        {
+            var posProp = _hierarchy.GetProperty<PropPosition>(id, "P$Position", false);
+            var doorProp = _hierarchy.GetProperty<PropRotDoor>(id, "P$RotDoor", false);
+            if (posProp != null && doorProp is { BlocksVision: true, Status: DoorStatus.Closed })
+            {
+                doorPositions.Add(posProp.Location);
+                Log.Debug("Found closed rotating door: {id}", id);
+            }
+        }
+
+        var transDoors = _hierarchy.GetConcreteObjectsWithPropDirect("P$TransDoor");
+        foreach (var id in transDoors)
+        {
+            var posProp = _hierarchy.GetProperty<PropPosition>(id, "P$Position", false);
+            var doorProp = _hierarchy.GetProperty<PropTransDoor>(id, "P$TransDoor", false);
+            if (posProp != null && doorProp is { BlocksVision: true, Status: DoorStatus.Closed })
+            {
+                doorPositions.Add(posProp.Location);
+                Log.Debug("Found closed translating door: {id}", id);
+            }
+        }
+
+        var cellCount = worldRep.Cells.Length;
+        Parallel.For(0, doorPositions.Count, i =>
+        {
+            var pos = doorPositions[i];
+            for (var j = 0; j < cellCount; j++)
+            {
+                var cell = worldRep.Cells[j];
+                var contained = true;
+                for (var k = 0; k < cell.PlaneCount; k++)
+                {
+                    var plane = cell.Planes[k];
+                    if (MathUtils.DistanceFromPlane(plane, pos) < -MathUtils.Epsilon)
+                    {
+                        contained = false;
+                        break;
+                    }
+                }
+
+                if (contained)
+                {
+                    cell.Flags |= 16;
+                    cell.Flags |= 8;
+                    worldRep.Cells[j] = cell;
+                    Log.Debug("Updated vision blocking flags for cell: {j}", j);
+                }
+            }
+        });
     }
 
     private void BuildLightList(Settings settings)
