@@ -18,6 +18,11 @@ public class ObjectHierarchy
             Properties = new Dictionary<string, Property>();
         }
 
+        public bool IsConcrete()
+        {
+            return ObjectId >= 0;
+        }
+
         public T? GetProperty<T>(string propName) where T : Property
         {
             if (Properties.TryGetValue(propName, out var prop))
@@ -158,5 +163,19 @@ public class ObjectHierarchy
         }
 
         return null;
+    }
+
+    public List<int> GetConcreteObjectsWithPropDirect(string propName)
+    {
+        var objects = new List<int>();
+        foreach (var (id, obj) in _objects)
+        {
+            if (obj.IsConcrete() && obj.Properties.ContainsKey(propName))
+            {
+                objects.Add(id);
+            }
+        }
+
+        return objects;
     }
 }
