@@ -1,6 +1,6 @@
 using KeepersCompound.Formats.TagFile.Blocks;
-using KeepersCompound.Formats.TagFile.Blocks.RotDoor;
-using KeepersCompound.Formats.TagFile.Blocks.TransDoor;
+using KeepersCompound.Formats.TagFile.Blocks.Door.RotDoor;
+using KeepersCompound.Formats.TagFile.Blocks.Door.TransDoor;
 using KeepersCompound.Formats.TagFile.Blocks.Unknown;
 using Serilog;
 
@@ -34,6 +34,8 @@ public class TagFileParser : IBinaryParser<TagFile>
                 reader.BaseStream.Seek(entry.Offset, SeekOrigin.Begin);
                 blocks.Add(entry.Tag, entry.Tag switch
                 {
+                    "P$TransDoor" => new TransDoorBlockParser(entry).Read(reader),
+                    "P$RotDoor" => new RotDoorBlockParser(entry).Read(reader),
                     _ => new UnknownBlockParser(entry).Read(reader),
                 });
             }
@@ -72,6 +74,12 @@ public class TagFileParser : IBinaryParser<TagFile>
             var entry = new TocEntry(tag, (uint)offset, 0);
             switch (tag)
             {
+                case "P$TransDoor":
+                    new TransDoorBlockParser(entry).Write(writer, (TransDoorBlock)block);
+                    break;
+                case "P$RotDoor":
+                    new RotDoorBlockParser(entry).Write(writer, (RotDoorBlock)block);
+                    break;
                 default:
                     new UnknownBlockParser(entry).Write(writer, (UnknownBlock)block);
                     break;
