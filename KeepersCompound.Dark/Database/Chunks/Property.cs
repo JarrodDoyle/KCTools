@@ -614,7 +614,10 @@ public class PropRotDoor : Property
         ClosedPosition = reader.ReadVec3();
         OpenPosition = reader.ReadVec3();
         Position = reader.ReadVec3();
-        Position2 = reader.ReadVec3();
+        if (version >= 66539)
+        {
+            Position2 = reader.ReadVec3();
+        }
         Rotation = reader.ReadRotation();
         Base = reader.ReadSingle();
         RoomHint1 = reader.ReadInt32();
@@ -623,7 +626,10 @@ public class PropRotDoor : Property
         reader.ReadBytes(3);
         ClosedRotation = reader.ReadRotation();
         OpenRotation = reader.ReadRotation();
-        LeanBlocksSoundPct = reader.ReadSingle();
+        if (version >= 66538)
+        {
+            LeanBlocksSoundPct = reader.ReadSingle();
+        }
     }
 
     public override void Write(BinaryWriter writer, uint version)
@@ -644,7 +650,10 @@ public class PropRotDoor : Property
         writer.WriteVec3(ClosedPosition);
         writer.WriteVec3(OpenPosition);
         writer.WriteVec3(Position);
-        writer.WriteVec3(Position2);
+        if (version >= 66539)
+        {
+            writer.WriteVec3(Position2);
+        }
         writer.WriteRotation(Rotation);
         writer.Write(Base);
         writer.Write(RoomHint1);
@@ -653,7 +662,10 @@ public class PropRotDoor : Property
         writer.Write(new byte[3]);
         writer.WriteRotation(ClosedRotation);
         writer.WriteRotation(OpenRotation);
-        writer.Write(LeanBlocksSoundPct);
+        if (version >= 66538)
+        {
+            writer.Write(LeanBlocksSoundPct);
+        }
     }
 }
 
@@ -698,12 +710,18 @@ public class PropTransDoor : Property
         ClosedPosition = reader.ReadVec3();
         OpenPosition = reader.ReadVec3();
         Position = reader.ReadVec3();
-        Position2 = reader.ReadVec3();
+        if (version >= 66538)
+        {
+            Position2 = reader.ReadVec3();
+        }
         Rotation = reader.ReadRotation();
         Base = reader.ReadSingle();
         RoomHint1 = reader.ReadInt32();
         RoomHint2 = reader.ReadInt32();
-        LeanBlocksSoundPct = reader.ReadSingle();
+        if (version >= 66537)
+        {
+            LeanBlocksSoundPct = reader.ReadSingle();
+        }
     }
 
     public override void Write(BinaryWriter writer, uint version)
@@ -724,11 +742,17 @@ public class PropTransDoor : Property
         writer.WriteVec3(ClosedPosition);
         writer.WriteVec3(OpenPosition);
         writer.WriteVec3(Position);
-        writer.WriteVec3(Position2);
+        if (version >= 66538)
+        {
+            writer.WriteVec3(Position2);
+        }
         writer.WriteRotation(Rotation);
         writer.Write(Base);
         writer.Write(RoomHint1);
         writer.Write(RoomHint2);
-        writer.Write(LeanBlocksSoundPct);
+        if (version >= 66537)
+        {
+            writer.Write(LeanBlocksSoundPct);
+        }
     }
 }
