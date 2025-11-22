@@ -553,3 +553,182 @@ public class PropJointPos : Property
         }
     }
 }
+
+public enum DoorAxis
+{
+    ZAxis,
+    YAxis,
+    XAxis,
+}
+
+public enum DoorStatus
+{
+    Closed,
+    Open,
+    Closing,
+    Opening,
+    Halted,
+}
+
+public class PropRotDoor : Property
+{
+    public int Type;
+    public float ClosedAngle;
+    public float OpenAngle;
+    public float BaseSpeed;
+    public DoorAxis Axis;
+    public DoorStatus Status;
+    public bool HardLimits;
+    public float BlocksSoundPct;
+    public bool BlocksVision;
+    public float PushMass;
+    public Vector3 ClosedPosition;
+    public Vector3 OpenPosition;
+    public Vector3 Position;
+    public Vector3 Position2;
+    public Vector3 Rotation;
+    public float Base;
+    public int RoomHint1;
+    public int RoomHint2;
+    public bool Clockwise;
+    public Vector3 ClosedRotation;
+    public Vector3 OpenRotation;
+    public float LeanBlocksSoundPct;
+
+    public override void Read(BinaryReader reader)
+    {
+        base.Read(reader);
+
+        Type = reader.ReadInt32();
+        ClosedAngle = reader.ReadSingle();
+        OpenAngle = reader.ReadSingle();
+        BaseSpeed = reader.ReadSingle();
+        Axis = (DoorAxis)reader.ReadInt32();
+        Status = (DoorStatus)reader.ReadInt32();
+        HardLimits = reader.ReadBoolean();
+        reader.ReadBytes(3);
+        BlocksSoundPct = reader.ReadSingle();
+        BlocksVision = reader.ReadBoolean();
+        reader.ReadBytes(3);
+        PushMass = reader.ReadSingle();
+        ClosedPosition = reader.ReadVec3();
+        OpenPosition = reader.ReadVec3();
+        Position = reader.ReadVec3();
+        Position2 = reader.ReadVec3();
+        Rotation = reader.ReadRotation();
+        Base = reader.ReadSingle();
+        RoomHint1 = reader.ReadInt32();
+        RoomHint2 = reader.ReadInt32();
+        Clockwise = reader.ReadBoolean();
+        reader.ReadBytes(3);
+        ClosedRotation = reader.ReadRotation();
+        OpenRotation = reader.ReadRotation();
+        LeanBlocksSoundPct = reader.ReadSingle();
+    }
+
+    public override void Write(BinaryWriter writer)
+    {
+        base.Write(writer);
+        writer.Write(Type);
+        writer.Write(ClosedAngle);
+        writer.Write(OpenAngle);
+        writer.Write(BaseSpeed);
+        writer.Write((int)Axis);
+        writer.Write((int)Status);
+        writer.Write(HardLimits);
+        writer.Write(new byte[3]);
+        writer.Write(BlocksSoundPct);
+        writer.Write(BlocksVision);
+        writer.Write(new byte[3]);
+        writer.Write(PushMass);
+        writer.WriteVec3(ClosedPosition);
+        writer.WriteVec3(OpenPosition);
+        writer.WriteVec3(Position);
+        writer.WriteVec3(Position2);
+        writer.WriteRotation(Rotation);
+        writer.Write(Base);
+        writer.Write(RoomHint1);
+        writer.Write(RoomHint2);
+        writer.Write(Clockwise);
+        writer.Write(new byte[3]);
+        writer.WriteRotation(ClosedRotation);
+        writer.WriteRotation(OpenRotation);
+        writer.Write(LeanBlocksSoundPct);
+    }
+}
+
+public class PropTransDoor : Property
+{
+    public int Type;
+    public float ClosedOffset;
+    public float OpenOffset;
+    public float BaseSpeed;
+    public DoorAxis Axis;
+    public DoorStatus Status;
+    public bool HardLimits;
+    public float BlocksSoundPct;
+    public bool BlocksVision;
+    public float PushMass;
+    public Vector3 ClosedPosition;
+    public Vector3 OpenPosition;
+    public Vector3 Position;
+    public Vector3 Position2;
+    public Vector3 Rotation;
+    public float Base;
+    public int RoomHint1;
+    public int RoomHint2;
+    public float LeanBlocksSoundPct;
+
+    public override void Read(BinaryReader reader)
+    {
+        base.Read(reader);
+
+        Type = reader.ReadInt32();
+        ClosedOffset = reader.ReadSingle();
+        OpenOffset = reader.ReadSingle();
+        BaseSpeed = reader.ReadSingle();
+        Axis = (DoorAxis)reader.ReadInt32();
+        Status = (DoorStatus)reader.ReadInt32();
+        HardLimits = reader.ReadBoolean();
+        reader.ReadBytes(3);
+        BlocksSoundPct = reader.ReadSingle();
+        BlocksVision = reader.ReadBoolean();
+        reader.ReadBytes(3);
+        PushMass = reader.ReadSingle();
+        ClosedPosition = reader.ReadVec3();
+        OpenPosition = reader.ReadVec3();
+        Position = reader.ReadVec3();
+        Position2 = reader.ReadVec3();
+        Rotation = reader.ReadRotation();
+        Base = reader.ReadSingle();
+        RoomHint1 = reader.ReadInt32();
+        RoomHint2 = reader.ReadInt32();
+        LeanBlocksSoundPct = reader.ReadSingle();
+    }
+
+    public override void Write(BinaryWriter writer)
+    {
+        base.Write(writer);
+        writer.Write(Type);
+        writer.Write(ClosedOffset);
+        writer.Write(OpenOffset);
+        writer.Write(BaseSpeed);
+        writer.Write((int)Axis);
+        writer.Write((int)Status);
+        writer.Write(HardLimits);
+        writer.Write(new byte[3]);
+        writer.Write(BlocksSoundPct);
+        writer.Write(BlocksVision);
+        writer.Write(new byte[3]);
+        writer.Write(PushMass);
+        writer.WriteVec3(ClosedPosition);
+        writer.WriteVec3(OpenPosition);
+        writer.WriteVec3(Position);
+        writer.WriteVec3(Position2);
+        writer.WriteRotation(Rotation);
+        writer.Write(Base);
+        writer.Write(RoomHint1);
+        writer.Write(RoomHint2);
+        writer.Write(LeanBlocksSoundPct);
+    }
+}

@@ -111,6 +111,7 @@ public class ObjectHierarchy
             }
         }
 
+        AddProp<PropPosition>("P$Position");
         AddProp<PropLabel>("P$ModelName");
         AddProp<PropVector>("P$Scale");
         AddProp<PropRenderType>("P$RenderTyp");
@@ -127,6 +128,8 @@ public class ObjectHierarchy
         AddProp<PropLightColor>("P$LightColo");
         AddProp<PropSpotlight>("P$Spotlight");
         AddProp<PropSpotlightAndAmbient>("P$SpotAmb");
+        AddProp<PropRotDoor>("P$RotDoor");
+        AddProp<PropTransDoor>("P$TransDoor");
     }
 
     // TODO: Work out if there's some nice way to automatically decide if we inherit
