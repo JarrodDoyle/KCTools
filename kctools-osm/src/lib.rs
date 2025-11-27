@@ -17,11 +17,7 @@ pub extern "Rust" fn module_init(_: &mut ScriptModule) -> Result<(), &'static st
 
     let fm = match services.version.get_current_fm() {
         Some(fm) => fm,
-        None => {
-            return Err(
-                "Failed to determine current FM. Make sure you are running DromEd in FM mode!",
-            );
-        }
+        None => "".to_string(),
     };
 
     let path = match services.engine.config_get_raw("kctools_path") {
