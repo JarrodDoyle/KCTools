@@ -92,6 +92,12 @@ public class RootCommand
                 }
 
                 CampaignName ??= "";
+                if (CampaignName != "" && !context.Fms.Contains(CampaignName))
+                {
+                    Log.Error("Failed to find campaign: {campaign}", CampaignName);
+                    return;
+                }
+
                 var resources = Timing.TimeStage("Resource Path Gathering", () =>
                 {
                     var resourceManager = new ResourceManager(context);
@@ -204,6 +210,12 @@ public class RootCommand
                 }
 
                 CampaignName ??= "";
+                if (CampaignName != "" && !context.Fms.Contains(CampaignName))
+                {
+                    Log.Error("Failed to find campaign: {campaign}", CampaignName);
+                    return;
+                }
+
                 var resources = Timing.TimeStage("Resource Path Gathering", () =>
                 {
                     var resourceManager = new ResourceManager(context);
