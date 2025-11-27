@@ -52,7 +52,7 @@ public class InstallContext
 
         var camModLines = File.ReadAllLines(configPaths[(int)ConfigFile.CamMod]);
         FindConfigVar(camModLines, "fm_path", out var fmsPath, "FMs");
-        FmsDir = Path.Join(installPath, fmsPath);
+        FmsDir = PathUtils.AbsJoin(installPath, fmsPath);
         Log.Information("FM Directory: {FmDir}", FmsDir);
         if (Directory.Exists(FmsDir))
         {
@@ -110,8 +110,6 @@ public class InstallContext
                        FindConfigVar(camLines, varName, out value, defaultValue);
             }
 
-            FindCamVar("include_path", out var includePath, "./");
-
             if (!FindCamVar("game", out var gameName))
             {
                 Log.Error("`game` not specified in Cam/CamExt");
@@ -130,8 +128,8 @@ public class InstallContext
                 return false;
             }
 
-            includePath = PathUtils.ConvertSeparator(includePath);
-            includePath = Path.Join(installPath, includePath);
+            FindCamVar("include_path", out var includePath, "./");
+            includePath = PathUtils.AbsJoin(installPath, PathUtils.ConvertSeparator(includePath));
             if (!Directory.Exists(includePath))
             {
                 Log.Error("Include path specified in Cam/CamExt does not exist: {IncludePath}", includePath);
@@ -199,8 +197,7 @@ public class InstallContext
 
         foreach (var path in paths.Split('+'))
         {
-            var cPath = PathUtils.ConvertSeparator(path);
-            var dir = Path.IsPathFullyQualified(cPath) ? cPath : Path.Join(rootPath, cPath);
+            var dir = PathUtils.AbsJoin(rootPath, PathUtils.ConvertSeparator(path));
             if (!Directory.Exists(dir))
             {
                 Log.Warning("Install config references non-existent {VarName}: {Path}", varName, dir);
