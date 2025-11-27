@@ -39,9 +39,9 @@ internal static class Program
         Log.Logger = config.CreateLogger();
     }
 
-    public static void Main(string[] args)
+    public static int Main(string[] args)
     {
-        Cli.Run<RootCommand>(args);
+        return Cli.Run<RootCommand>(args);
     }
 }
 
