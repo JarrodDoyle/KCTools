@@ -6,4 +6,9 @@ public class PathUtils
     {
         return path.Replace('\\', '/');
     }
+
+    public static string AbsJoin(string rootPath, string path)
+    {
+        return Path.IsPathFullyQualified(path) ? path : Path.Join(rootPath, path);
+    }
 }
