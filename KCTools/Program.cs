@@ -72,18 +72,18 @@ public class RootCommand
         [CliOption(Description = "Automatically obtain campaign name from `DromEd.log`. Overrides `--campaign-name`.")]
         public bool AutoCampaign { get; set; } = false;
 
-        public void Run()
+        public int Run()
         {
             Program.ConfigureLogger(Quiet);
 
             Timing.Reset();
-            Timing.TimeStage("Total", () =>
+            var exitCode = Timing.TimeStage("Total", () =>
             {
                 var context = Timing.TimeStage("Initialise install context", () => new InstallContext(InstallPath));
                 if (!context.Valid)
                 {
                     Log.Error("Invalid install context");
-                    return;
+                    return ExitCode.Error;
                 }
 
                 if (AutoCampaign)
@@ -95,7 +95,7 @@ public class RootCommand
                 if (CampaignName != "" && !context.Fms.Contains(CampaignName))
                 {
                     Log.Error("Failed to find campaign: {campaign}", CampaignName);
-                    return;
+                    return ExitCode.Error;
                 }
 
                 var resources = Timing.TimeStage("Resource Path Gathering", () =>
@@ -113,7 +113,7 @@ public class RootCommand
 
                 if (!loaded || mission == null)
                 {
-                    return;
+                    return ExitCode.Error;
                 }
 
                 var lightMapper = new LightMapper(resources, mission);
@@ -132,9 +132,17 @@ public class RootCommand
                         var savePath = Path.Join(folder, misName);
                         Timing.TimeStage("Save Mission File", () => mission.Save(savePath));
                     }
+                    else
+                    {
+                        return ExitCode.Error;
+                    }
                 }
+
+                return ExitCode.Success;
             });
             Timing.LogAll();
+
+            return (int)exitCode;
         }
 
         private void CampaignFromDromedLog()
