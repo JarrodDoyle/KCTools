@@ -113,6 +113,7 @@ public class RootCommand
 
                 if (!loaded || mission == null)
                 {
+                    Log.Error("Failed to load mission: {name}", MissionName);
                     return ExitCode.Error;
                 }
 
@@ -134,6 +135,7 @@ public class RootCommand
                     }
                     else
                     {
+                        Log.Error("Failed to find a valid mission save path: {name}", MissionName);
                         return ExitCode.Error;
                     }
                 }
