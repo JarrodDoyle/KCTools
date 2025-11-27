@@ -54,13 +54,16 @@ public class InstallContext
         FindConfigVar(camModLines, "fm_path", out var fmsPath, "FMs");
         FmsDir = Path.Join(installPath, fmsPath);
         Log.Information("FM Directory: {FmDir}", FmsDir);
-        foreach (var dir in Directory.GetDirectories(FmsDir))
+        if (Directory.Exists(FmsDir))
         {
-            var name = Path.GetFileName(dir);
-            Fms.Add(name);
-        }
+            foreach (var dir in Directory.GetDirectories(FmsDir))
+            {
+                var name = Path.GetFileName(dir);
+                Fms.Add(name);
+            }
 
-        Fms.Sort();
+            Fms.Sort();
+        }
 
         Valid = true;
     }
