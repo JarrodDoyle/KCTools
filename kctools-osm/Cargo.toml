@@ -7,7 +7,7 @@ edition = "2024"
 crate-type=["cdylib"]
 
 [dependencies]
-kc-osm = { git = "https://github.com/JarrodDoyle/osm-rs.git", rev = "8222dd33d107e834817aa56d9bd7d7c03f677155" }
+kc-osm = { git = "https://github.com/JarrodDoyle/osm-rs.git", rev = "bac697345c3d0734b779d35b4e8c237e7b5c5243" }
 windows-core = "0.62.2"
 
 [profile.release]
