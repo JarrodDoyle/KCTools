@@ -2,6 +2,7 @@ using KeepersCompound.Formats.TagFile.Blocks;
 using KeepersCompound.Formats.TagFile.Blocks.Door.RotDoor;
 using KeepersCompound.Formats.TagFile.Blocks.Door.TransDoor;
 using KeepersCompound.Formats.TagFile.Blocks.GamFile;
+using KeepersCompound.Formats.TagFile.Blocks.LmParams;
 using KeepersCompound.Formats.TagFile.Blocks.Unknown;
 using Serilog;
 
@@ -36,6 +37,7 @@ public class TagFileParser : IBinaryParser<TagFile>
                 blocks.Add(entry.Tag, entry.Tag switch
                 {
                     "GAM_FILE" => new GamFileBlockParser().Read(reader),
+                    "LM_PARAM" => new LmParamsBlockParser().Read(reader),
                     "P$TransDoor" => new TransDoorBlockParser(entry).Read(reader),
                     "P$RotDoor" => new RotDoorBlockParser(entry).Read(reader),
                     _ => new UnknownBlockParser(entry).Read(reader),
