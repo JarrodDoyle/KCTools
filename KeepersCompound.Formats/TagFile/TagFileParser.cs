@@ -1,8 +1,8 @@
 using KeepersCompound.Formats.TagFile.Blocks;
-using KeepersCompound.Formats.TagFile.Blocks.Door.RotDoor;
-using KeepersCompound.Formats.TagFile.Blocks.Door.TransDoor;
 using KeepersCompound.Formats.TagFile.Blocks.GamFile;
 using KeepersCompound.Formats.TagFile.Blocks.LmParams;
+using KeepersCompound.Formats.TagFile.Blocks.Props.Door.RotDoor;
+using KeepersCompound.Formats.TagFile.Blocks.Props.Door.TransDoor;
 using KeepersCompound.Formats.TagFile.Blocks.Unknown;
 using Serilog;
 

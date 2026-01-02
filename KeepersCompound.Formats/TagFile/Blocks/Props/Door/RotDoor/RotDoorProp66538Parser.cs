@@ -1,6 +1,6 @@
-namespace KeepersCompound.Formats.TagFile.Blocks.Door.RotDoor;
+namespace KeepersCompound.Formats.TagFile.Blocks.Props.Door.RotDoor;
 
-public class RotDoorProp66537Parser : IBinaryParser<RotDoorProp>
+public class RotDoorProp66538Parser : IBinaryParser<RotDoorProp>
 {
     public RotDoorProp Read(BinaryReader reader)
     {
@@ -29,6 +29,7 @@ public class RotDoorProp66537Parser : IBinaryParser<RotDoorProp>
         reader.ReadBytes(3);
         var closedRotation = reader.ReadRotation();
         var openRotation = reader.ReadRotation();
+        var leanBlocksSoundPct = reader.ReadSingle();
 
         return new RotDoorProp
         {
@@ -55,7 +56,7 @@ public class RotDoorProp66537Parser : IBinaryParser<RotDoorProp>
             Clockwise = clockwise,
             ClosedRotation = closedRotation,
             OpenRotation = openRotation,
-            LeanBlocksSoundPct = 0,
+            LeanBlocksSoundPct = leanBlocksSoundPct,
         };
     }
 
@@ -86,5 +87,6 @@ public class RotDoorProp66537Parser : IBinaryParser<RotDoorProp>
         writer.Write(new byte[3]);
         writer.WriteRotation(item.ClosedRotation);
         writer.WriteRotation(item.OpenRotation);
+        writer.Write(item.LeanBlocksSoundPct);
     }
 }

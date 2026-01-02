@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace KeepersCompound.Formats.TagFile.Blocks.Door.RotDoor;
+namespace KeepersCompound.Formats.TagFile.Blocks.Props.Door.RotDoor;
 
 public class RotDoorProp
 {

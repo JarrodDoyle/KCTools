@@ -1,4 +1,4 @@
-namespace KeepersCompound.Formats.TagFile.Blocks.Door.TransDoor;
+namespace KeepersCompound.Formats.TagFile.Blocks.Props.Door.TransDoor;
 
 public class TransDoorBlockParser : IBinaryParser<TransDoorBlock>
 {

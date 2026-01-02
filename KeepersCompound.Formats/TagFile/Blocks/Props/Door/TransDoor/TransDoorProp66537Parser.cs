@@ -1,6 +1,6 @@
-namespace KeepersCompound.Formats.TagFile.Blocks.Door.TransDoor;
+namespace KeepersCompound.Formats.TagFile.Blocks.Props.Door.TransDoor;
 
-public class TransDoorProp66538Parser : IBinaryParser<TransDoorProp>
+public class TransDoorProp66537Parser : IBinaryParser<TransDoorProp>
 {
     public TransDoorProp Read(BinaryReader reader)
     {
@@ -21,7 +21,6 @@ public class TransDoorProp66538Parser : IBinaryParser<TransDoorProp>
         var closedPosition = reader.ReadVec3();
         var openPosition = reader.ReadVec3();
         var position = reader.ReadVec3();
-        var position2 = reader.ReadVec3();
         var rotation = reader.ReadRotation();
         var baseRotation = reader.ReadSingle();
         var roomHint1 = reader.ReadInt32();
@@ -45,7 +44,7 @@ public class TransDoorProp66538Parser : IBinaryParser<TransDoorProp>
             ClosedPosition = closedPosition,
             OpenPosition = openPosition,
             Position = position,
-            Position2 = position2,
+            Position2 = default,
             Rotation = rotation,
             Base = baseRotation,
             RoomHint1 = roomHint1,
@@ -73,7 +72,6 @@ public class TransDoorProp66538Parser : IBinaryParser<TransDoorProp>
         writer.WriteVec3(item.ClosedPosition);
         writer.WriteVec3(item.OpenPosition);
         writer.WriteVec3(item.Position);
-        writer.WriteVec3(item.Position2);
         writer.WriteRotation(item.Rotation);
         writer.Write(item.Base);
         writer.Write(item.RoomHint1);

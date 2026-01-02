@@ -1,14 +1,14 @@
-namespace KeepersCompound.Formats.TagFile.Blocks.Door.TransDoor;
+namespace KeepersCompound.Formats.TagFile.Blocks.Props.Door.RotDoor;
 
-public class TransDoorProp66537Parser : IBinaryParser<TransDoorProp>
+public class RotDoorProp66537Parser : IBinaryParser<RotDoorProp>
 {
-    public TransDoorProp Read(BinaryReader reader)
+    public RotDoorProp Read(BinaryReader reader)
     {
         var objectId = reader.ReadInt32();
         var length = (int)reader.ReadUInt32();
         var type = reader.ReadInt32();
-        var closedOffset = reader.ReadSingle();
-        var openOffset = reader.ReadSingle();
+        var closedAngle = reader.ReadSingle();
+        var openAngle = reader.ReadSingle();
         var baseSpeed = reader.ReadSingle();
         var axis = (DoorAxis)reader.ReadInt32();
         var status = (DoorStatus)reader.ReadInt32();
@@ -25,15 +25,18 @@ public class TransDoorProp66537Parser : IBinaryParser<TransDoorProp>
         var baseRotation = reader.ReadSingle();
         var roomHint1 = reader.ReadInt32();
         var roomHint2 = reader.ReadInt32();
-        var leanBlocksSoundPct = reader.ReadSingle();
+        var clockwise = reader.ReadBoolean();
+        reader.ReadBytes(3);
+        var closedRotation = reader.ReadRotation();
+        var openRotation = reader.ReadRotation();
 
-        return new TransDoorProp
+        return new RotDoorProp
         {
             ObjectId = objectId,
             Length = length,
             Type = type,
-            ClosedOffset = closedOffset,
-            OpenOffset = openOffset,
+            ClosedAngle = closedAngle,
+            OpenAngle = openAngle,
             BaseSpeed = baseSpeed,
             Axis = axis,
             Status = status,
@@ -49,17 +52,20 @@ public class TransDoorProp66537Parser : IBinaryParser<TransDoorProp>
             Base = baseRotation,
             RoomHint1 = roomHint1,
             RoomHint2 = roomHint2,
-            LeanBlocksSoundPct = leanBlocksSoundPct
+            Clockwise = clockwise,
+            ClosedRotation = closedRotation,
+            OpenRotation = openRotation,
+            LeanBlocksSoundPct = 0,
         };
     }
 
-    public void Write(BinaryWriter writer, TransDoorProp item)
+    public void Write(BinaryWriter writer, RotDoorProp item)
     {
         writer.Write(item.ObjectId);
         writer.Write((uint)item.Length);
         writer.Write(item.Type);
-        writer.Write(item.ClosedOffset);
-        writer.Write(item.OpenOffset);
+        writer.Write(item.ClosedAngle);
+        writer.Write(item.OpenAngle);
         writer.Write(item.BaseSpeed);
         writer.Write((int)item.Axis);
         writer.Write((int)item.Status);
@@ -76,6 +82,9 @@ public class TransDoorProp66537Parser : IBinaryParser<TransDoorProp>
         writer.Write(item.Base);
         writer.Write(item.RoomHint1);
         writer.Write(item.RoomHint2);
-        writer.Write(item.LeanBlocksSoundPct);
+        writer.Write(item.Clockwise);
+        writer.Write(new byte[3]);
+        writer.WriteRotation(item.ClosedRotation);
+        writer.WriteRotation(item.OpenRotation);
     }
 }
