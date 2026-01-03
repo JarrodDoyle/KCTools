@@ -2,10 +2,8 @@ using System.Numerics;
 
 namespace KeepersCompound.Formats.TagFile.Blocks.Props.Door.TransDoor;
 
-public class TransDoorProp
+public class TransDoorProp : AbstractProp
 {
-    public required int ObjectId { get; set; }
-    public required int Length { get; set; }
     public required int Type { get; set; }
     public required float ClosedOffset { get; set; }
     public required float OpenOffset { get; set; }

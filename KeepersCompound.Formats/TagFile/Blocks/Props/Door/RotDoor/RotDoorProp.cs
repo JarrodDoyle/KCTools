@@ -2,10 +2,8 @@ using System.Numerics;
 
 namespace KeepersCompound.Formats.TagFile.Blocks.Props.Door.RotDoor;
 
-public class RotDoorProp
+public class RotDoorProp : AbstractProp
 {
-    public int ObjectId;
-    public int Length;
     public required int Type { get; set; }
     public required float ClosedAngle { get; set; }
     public required float OpenAngle { get; set; }

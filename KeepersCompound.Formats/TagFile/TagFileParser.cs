@@ -1,6 +1,7 @@
 using KeepersCompound.Formats.TagFile.Blocks;
 using KeepersCompound.Formats.TagFile.Blocks.GamFile;
 using KeepersCompound.Formats.TagFile.Blocks.LmParams;
+using KeepersCompound.Formats.TagFile.Blocks.Props;
 using KeepersCompound.Formats.TagFile.Blocks.Props.Door.RotDoor;
 using KeepersCompound.Formats.TagFile.Blocks.Props.Door.TransDoor;
 using KeepersCompound.Formats.TagFile.Blocks.Unknown;
@@ -79,10 +80,10 @@ public class TagFileParser : IBinaryParser<TagFile>
             switch (tag)
             {
                 case "P$TransDoor":
-                    new TransDoorBlockParser(entry).Write(writer, (TransDoorBlock)block);
+                    new TransDoorBlockParser(entry).Write(writer, (PropBlock<TransDoorProp>)block);
                     break;
                 case "P$RotDoor":
-                    new RotDoorBlockParser(entry).Write(writer, (RotDoorBlock)block);
+                    new RotDoorBlockParser(entry).Write(writer, (PropBlock<RotDoorProp>)block);
                     break;
                 default:
                     new UnknownBlockParser(entry).Write(writer, (UnknownBlock)block);
