@@ -1,6 +1,6 @@
 namespace KeepersCompound.Formats.TagFile.Blocks.Unknown;
 
-public class UnknownBlockParser : IBinaryParser<UnknownBlock>
+public class UnknownBlockParser : IBinaryParser<AbstractBlock>
 {
     private readonly TocEntry _entry;
 
@@ -9,7 +9,7 @@ public class UnknownBlockParser : IBinaryParser<UnknownBlock>
         _entry = entry;
     }
 
-    public UnknownBlock Read(BinaryReader reader)
+    public AbstractBlock Read(BinaryReader reader)
     {
         var header = new BlockHeaderParser().Read(reader);
         var data = reader.ReadBytes((int)_entry.Size);
@@ -20,9 +20,14 @@ public class UnknownBlockParser : IBinaryParser<UnknownBlock>
         };
     }
 
-    public void Write(BinaryWriter writer, UnknownBlock item)
+    public void Write(BinaryWriter writer, AbstractBlock item)
     {
-        new BlockHeaderParser().Write(writer, item.Header);
-        writer.Write(item.Data);
+        if (item is not UnknownBlock block)
+        {
+            return;
+        }
+
+        new BlockHeaderParser().Write(writer, block.Header);
+        writer.Write(block.Data);
     }
 }

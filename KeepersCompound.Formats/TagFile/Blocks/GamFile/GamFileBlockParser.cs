@@ -1,8 +1,8 @@
 namespace KeepersCompound.Formats.TagFile.Blocks.GamFile;
 
-public class GamFileBlockParser : IBinaryParser<GamFileBlock>
+public class GamFileBlockParser : IBinaryParser<AbstractBlock>
 {
-    public GamFileBlock Read(BinaryReader reader)
+    public AbstractBlock Read(BinaryReader reader)
     {
         var header = new BlockHeaderParser().Read(reader);
         var fileName = reader.ReadNullString(256);
@@ -14,9 +14,14 @@ public class GamFileBlockParser : IBinaryParser<GamFileBlock>
         };
     }
 
-    public void Write(BinaryWriter writer, GamFileBlock item)
+    public void Write(BinaryWriter writer, AbstractBlock item)
     {
-        new BlockHeaderParser().Write(writer, item.Header);
-        writer.WriteNullString(item.FileName, 256);
+        if (item is not GamFileBlock block)
+        {
+            return;
+        }
+
+        new BlockHeaderParser().Write(writer, block.Header);
+        writer.WriteNullString(block.FileName, 256);
     }
 }

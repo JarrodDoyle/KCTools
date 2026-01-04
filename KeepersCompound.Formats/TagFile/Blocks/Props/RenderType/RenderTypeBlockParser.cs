@@ -1,6 +1,6 @@
 namespace KeepersCompound.Formats.TagFile.Blocks.Props.RenderType;
 
-public class RenderTypeBlockParser: AbstractPropBlockParser<RenderTypeProp>
+public class RenderTypeBlockParser : AbstractPropBlockParser<RenderTypeProp>
 {
     public RenderTypeBlockParser(TocEntry entry) : base(entry)
     {

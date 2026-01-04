@@ -1,7 +1,6 @@
-
 namespace KeepersCompound.Formats.TagFile.Blocks.Props;
 
-public abstract class AbstractPropBlockParser<T> : IBinaryParser<PropBlock<T>> where T: AbstractProp
+public abstract class AbstractPropBlockParser<T> : IBinaryParser<AbstractBlock> where T : AbstractProp
 {
     protected readonly TocEntry Entry;
 
@@ -9,8 +8,8 @@ public abstract class AbstractPropBlockParser<T> : IBinaryParser<PropBlock<T>> w
     {
         Entry = entry;
     }
-    
-    public PropBlock<T> Read(BinaryReader reader)
+
+    public AbstractBlock Read(BinaryReader reader)
     {
         var header = new BlockHeaderParser().Read(reader);
         var propParser = GetPropParser(header.Version);
@@ -27,11 +26,16 @@ public abstract class AbstractPropBlockParser<T> : IBinaryParser<PropBlock<T>> w
         };
     }
 
-    public void Write(BinaryWriter writer, PropBlock<T> item)
+    public void Write(BinaryWriter writer, AbstractBlock item)
     {
-        new BlockHeaderParser().Write(writer, item.Header);
-        var propParser = GetPropParser(item.Header.Version);
-        foreach (var prop in item.Props)
+        if (item is not PropBlock<T> block)
+        {
+            return;
+        }
+
+        new BlockHeaderParser().Write(writer, block.Header);
+        var propParser = GetPropParser(block.Header.Version);
+        foreach (var prop in block.Props)
         {
             propParser.Write(writer, prop);
         }

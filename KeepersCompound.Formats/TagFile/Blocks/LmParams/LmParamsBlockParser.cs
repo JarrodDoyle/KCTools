@@ -1,8 +1,8 @@
 namespace KeepersCompound.Formats.TagFile.Blocks.LmParams;
 
-public class LmParamsBlockParser : IBinaryParser<LmParamsBlock>
+public class LmParamsBlockParser : IBinaryParser<AbstractBlock>
 {
-    public LmParamsBlock Read(BinaryReader reader)
+    public AbstractBlock Read(BinaryReader reader)
     {
         var header = new BlockHeaderParser().Read(reader);
         var dataSize = reader.ReadInt32();
@@ -33,19 +33,24 @@ public class LmParamsBlockParser : IBinaryParser<LmParamsBlock>
         };
     }
 
-    public void Write(BinaryWriter writer, LmParamsBlock item)
+    public void Write(BinaryWriter writer, AbstractBlock item)
     {
-        new BlockHeaderParser().Write(writer, item.Header);
-        writer.Write(item.DataSize);
-        writer.Write(item.Attenuation);
-        writer.Write(item.Saturation);
-        writer.Write((uint)item.ShadowType);
-        writer.Write((uint)item.ShadowSoftness);
-        writer.Write(item.CenterWeight);
-        writer.Write((uint)item.ShadowDepth);
-        writer.Write(item.LightmappedWater);
+        if (item is not LmParamsBlock block)
+        {
+            return;
+        }
+
+        new BlockHeaderParser().Write(writer, block.Header);
+        writer.Write(block.DataSize);
+        writer.Write(block.Attenuation);
+        writer.Write(block.Saturation);
+        writer.Write((uint)block.ShadowType);
+        writer.Write((uint)block.ShadowSoftness);
+        writer.Write(block.CenterWeight);
+        writer.Write((uint)block.ShadowDepth);
+        writer.Write(block.LightmappedWater);
         writer.Write(new byte[3]);
-        writer.Write(item.LightmapScale);
-        writer.Write(item.AnimLightCutoff);
+        writer.Write(block.LightmapScale);
+        writer.Write(block.AnimLightCutoff);
     }
 }

@@ -1,11 +1,4 @@
 using KeepersCompound.Formats.TagFile.Blocks;
-using KeepersCompound.Formats.TagFile.Blocks.GamFile;
-using KeepersCompound.Formats.TagFile.Blocks.LmParams;
-using KeepersCompound.Formats.TagFile.Blocks.Props;
-using KeepersCompound.Formats.TagFile.Blocks.Props.Door.RenderType;
-using KeepersCompound.Formats.TagFile.Blocks.Props.Door.RotDoor;
-using KeepersCompound.Formats.TagFile.Blocks.Props.Door.TransDoor;
-using KeepersCompound.Formats.TagFile.Blocks.Unknown;
 using Serilog;
 
 namespace KeepersCompound.Formats.TagFile;
@@ -36,15 +29,7 @@ public class TagFileParser : IBinaryParser<TagFile>
             foreach (var entry in tocEntries)
             {
                 reader.BaseStream.Seek(entry.Offset, SeekOrigin.Begin);
-                blocks.Add(entry.Tag, entry.Tag switch
-                {
-                    "GAM_FILE" => new GamFileBlockParser().Read(reader),
-                    "LM_PARAM" => new LmParamsBlockParser().Read(reader),
-                    "P$TransDoor" => new TransDoorBlockParser(entry).Read(reader),
-                    "P$RenderTyp" => new RenderTypeBlockParser(entry).Read(reader),
-                    "P$RotDoor" => new RotDoorBlockParser(entry).Read(reader),
-                    _ => new UnknownBlockParser(entry).Read(reader),
-                });
+                blocks.Add(entry.Tag, BlockParserMapper.GetBlockParser(entry).Read(reader));
             }
 
             return new TagFile
@@ -79,21 +64,7 @@ public class TagFileParser : IBinaryParser<TagFile>
             var tag = block.Header.Tag;
             var offset = writer.BaseStream.Position;
             var entry = new TocEntry(tag, (uint)offset, 0);
-            switch (tag)
-            {
-                case "P$TransDoor":
-                    new TransDoorBlockParser(entry).Write(writer, (PropBlock<TransDoorProp>)block);
-                    break;
-                case "P$RenderTyp":
-                    new RenderTypeBlockParser(entry).Write(writer, (PropBlock<RenderTypeProp>)block);
-                    break;
-                case "P$RotDoor":
-                    new RotDoorBlockParser(entry).Write(writer, (PropBlock<RotDoorProp>)block);
-                    break;
-                default:
-                    new UnknownBlockParser(entry).Write(writer, (UnknownBlock)block);
-                    break;
-            }
+            BlockParserMapper.GetBlockParser(entry).Write(writer, block);
 
             var size = writer.BaseStream.Position - offset - 24;
             item.TocEntries.Add(new TocEntry(tag, (uint)offset, (uint)size));
