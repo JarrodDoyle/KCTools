@@ -3,6 +3,7 @@ using KeepersCompound.Formats.TagFile.Blocks.LmParams;
 using KeepersCompound.Formats.TagFile.Blocks.Props.Door.RenderType;
 using KeepersCompound.Formats.TagFile.Blocks.Props.Door.RotDoor;
 using KeepersCompound.Formats.TagFile.Blocks.Props.Door.TransDoor;
+using KeepersCompound.Formats.TagFile.Blocks.RendParams;
 using KeepersCompound.Formats.TagFile.Blocks.Unknown;
 
 namespace KeepersCompound.Formats.TagFile.Blocks;
@@ -18,6 +19,7 @@ public static class BlockParserMapper
             "P$TransDoor" => new TransDoorBlockParser(entry),
             "P$RenderTyp" => new RenderTypeBlockParser(entry),
             "P$RotDoor" => new RotDoorBlockParser(entry),
+            "RENDPARAMS" => new RendParamsBlockParser(),
             _ => new UnknownBlockParser(entry),
         };
     }
