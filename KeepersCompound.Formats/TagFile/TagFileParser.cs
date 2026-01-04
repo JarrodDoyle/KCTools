@@ -3,14 +3,14 @@ using Serilog;
 
 namespace KeepersCompound.Formats.TagFile;
 
-public class TagFileParser : IBinaryParser<TagFile>
+public class TagFileParser : IBinaryParser<TagFile?>
 {
     public TagFile? Read(BinaryReader reader)
     {
         try
         {
             var tocOffset = reader.ReadUInt32();
-            var version = new VersionParser().Read(reader)!;
+            var version = new VersionParser().Read(reader);
             reader.ReadBytes(256);
             var deadBeef = BitConverter.ToString(reader.ReadBytes(4));
             reader.BaseStream.Seek(tocOffset, SeekOrigin.Begin);
@@ -48,8 +48,13 @@ public class TagFileParser : IBinaryParser<TagFile>
         }
     }
 
-    public void Write(BinaryWriter writer, TagFile item)
+    public void Write(BinaryWriter writer, TagFile? item)
     {
+        if (item is null)
+        {
+            return;
+        }
+
         // Have to write in a different order than reading because Block sizes (and therefore offsets) may have changed
         // Offset is left blank in the header for now, will be filled in later
         writer.Write(new byte[4]);
