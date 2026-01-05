@@ -1,5 +1,4 @@
 using System.Numerics;
-using KeepersCompound.Dark;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Resources;
@@ -12,56 +11,34 @@ namespace KeepersCompound.Lighting;
 
 public class LightMapper
 {
-    private ResourceManager _resources;
-    private DbFile _mission;
-    private ObjectHierarchy _hierarchy;
-    private List<Light> _lights;
-    private SceneTracer _scene;
+    public LightMapperSettings Settings { get; }
 
-    public LightMapper(ResourceManager resources, DbFile mission)
+    private readonly List<Light> _lights;
+
+    public LightMapper(LightMapperSettings settings)
     {
-        _resources = resources;
-        _mission = mission;
-        _hierarchy = Timing.TimeStage("Build Object Hierarchy", BuildHierarchy);
+        Settings = settings;
         _lights = [];
-
-        VerifyRequiredChunksExist();
-
-        if (!_mission.TryGetChunk<BrList>("BRLIST", out var brList) ||
-            !_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
-        {
-            return;
-        }
-
-        _scene = Timing.TimeStage("Build tracing scenes", () => SceneTracerBuilder.Build(worldRep, brList, _hierarchy, _resources));
     }
 
-    public void Light()
+    public void Light(ResourceManager resources, ObjectHierarchy hierarchy, WorldRep worldRep, BrList brList, RendParams rendParams, LmParams lmParams, PropertyChunk<PropAnimLight> animLight)
     {
-        // TODO: Throw?
-        if (!_mission.TryGetChunk<RendParams>("RENDPARAMS", out var rendParams) ||
-            !_mission.TryGetChunk<LmParams>("LM_PARAM", out var lmParams) ||
-            !_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
-        {
-            return;
-        }
-
-        var settings = LightMapperSettingsBuilder.FromChunks(worldRep, rendParams, lmParams);
-        if (settings.AnimLightCutoff > 0)
+        if (Settings.AnimLightCutoff > 0)
         {
             Log.Warning(
                 "Non-zero anim_light_cutoff ({Cutoff}). AnimLight lightmap shadow radius may not match lightgem shadow radius.",
-                settings.AnimLightCutoff);
+                Settings.AnimLightCutoff);
         }
 
-        Timing.TimeStage("Set Door Blocking Flags", SetCellBlockingFlags);
-        Timing.TimeStage("Gather Lights", () => BuildLightList(settings));
-        Timing.TimeStage("Validate Lights", () => ValidateLightConfigurations(settings));
-        Timing.TimeStage("Build Lighting Table", BuildLightingTable);
-        Timing.TimeStage("Set Light Visibility", () => SetCellLightIndices(settings));
-        Timing.TimeStage("Trace Scene", () => TraceScene(settings));
-        Timing.TimeStage("Update AnimLight Cell Mapping", SetAnimLightCellMaps);
-        Timing.TimeStage("Post-Light Validation", PostLightValidation);
+        var scene = Timing.TimeStage("Build tracing scenes", () => SceneTracerBuilder.Build(worldRep, brList, hierarchy, resources));
+        Timing.TimeStage("Set Door Blocking Flags", () => SetCellBlockingFlags(hierarchy, worldRep));
+        Timing.TimeStage("Gather Lights", () => BuildLightList(resources, hierarchy, brList));
+        Timing.TimeStage("Validate Lights", ValidateLightConfigurations);
+        Timing.TimeStage("Build Lighting Table", () => BuildLightingTable(hierarchy, worldRep));
+        Timing.TimeStage("Set Light Visibility", () => SetCellLightIndices(worldRep));
+        Timing.TimeStage("Trace Scene", () => TraceScene(scene, worldRep));
+        Timing.TimeStage("Update AnimLight Cell Mapping", () => SetAnimLightCellMaps(worldRep, animLight));
+        Timing.TimeStage("Post-Light Validation", () => PostLightValidation(worldRep));
 
         // We always do object casting, so it's nice to let dromed know that :)
         lmParams.ShadowType = LmParams.LightingMode.Objcast;
@@ -75,26 +52,20 @@ public class LightMapper
         }
     }
 
-    public void Inspect()
+    public void Inspect(ResourceManager resources, ObjectHierarchy hierarchy, BrList brList)
     {
-        if (!_mission.TryGetChunk<LmParams>("LM_PARAM", out var lmParams))
-        {
-            return;
-        }
-
-        if (lmParams.AnimLightCutoff > 0)
+        if (Settings.AnimLightCutoff > 0)
         {
             Log.Warning(
                 "Non-zero anim_light_cutoff ({Cutoff}). AnimLight lightmap shadow radius may not match lightgem shadow radius.",
-                lmParams.AnimLightCutoff);
+                Settings.AnimLightCutoff);
         }
 
-        var settings = new LightMapperSettings();
-        Timing.TimeStage("Gather Lights", () => BuildLightList(settings));
-        Timing.TimeStage("Validate Lights", () => ValidateLightConfigurations(settings));
+        Timing.TimeStage("Gather Lights", () => BuildLightList(resources, hierarchy, brList));
+        Timing.TimeStage("Validate Lights", ValidateLightConfigurations);
     }
 
-    private bool VerifyRequiredChunksExist()
+    public static bool RequiredChunksExist(DbFile db)
     {
         var requiredChunkNames = new[]
         {
@@ -108,9 +79,9 @@ public class LightMapper
         var allFound = true;
         foreach (var name in requiredChunkNames)
         {
-            if (!_mission.Chunks.ContainsKey(name))
+            if (!db.Chunks.ContainsKey(name))
             {
-                Log.Warning("Failed to find required chunk: {ChunkName}", name);
+                Log.Warning("Missing chunk: {ChunkName}", name);
                 allFound = false;
             }
         }
@@ -118,38 +89,17 @@ public class LightMapper
         return allFound;
     }
 
-    private ObjectHierarchy BuildHierarchy()
-    {
-        if (!_mission.TryGetChunk<GamFile>("GAM_FILE", out var gamFile))
-        {
-            return new ObjectHierarchy(_mission);
-        }
-
-        if (_resources.TryGetDbFile(gamFile.FileName, out var gamesys))
-        {
-            return new ObjectHierarchy(_mission, gamesys);
-        }
-
-        Log.Warning("Failed to find GameSys");
-        return new ObjectHierarchy(_mission);
-    }
-
     /// <summary>
     /// Ensures "blocks_vision" and "can_block_vision" are set on cells containing doors.
     /// </summary>
-    private void SetCellBlockingFlags()
+    private static void SetCellBlockingFlags(ObjectHierarchy hierarchy, WorldRep worldRep)
     {
-        if (!_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
-        {
-            return;
-        }
-
         var doorPositions = new List<Vector3>();
-        var rotDoors = _hierarchy.GetConcreteObjectsWithPropDirect("P$RotDoor");
+        var rotDoors = hierarchy.GetConcreteObjectsWithPropDirect("P$RotDoor");
         foreach (var id in rotDoors)
         {
-            var posProp = _hierarchy.GetProperty<PropPosition>(id, "P$Position", false);
-            var doorProp = _hierarchy.GetProperty<PropRotDoor>(id, "P$RotDoor", false);
+            var posProp = hierarchy.GetProperty<PropPosition>(id, "P$Position", false);
+            var doorProp = hierarchy.GetProperty<PropRotDoor>(id, "P$RotDoor", false);
             if (posProp != null && doorProp is { BlocksVision: true, Status: DoorStatus.Closed })
             {
                 doorPositions.Add(posProp.Location);
@@ -157,11 +107,11 @@ public class LightMapper
             }
         }
 
-        var transDoors = _hierarchy.GetConcreteObjectsWithPropDirect("P$TransDoor");
+        var transDoors = hierarchy.GetConcreteObjectsWithPropDirect("P$TransDoor");
         foreach (var id in transDoors)
         {
-            var posProp = _hierarchy.GetProperty<PropPosition>(id, "P$Position", false);
-            var doorProp = _hierarchy.GetProperty<PropTransDoor>(id, "P$TransDoor", false);
+            var posProp = hierarchy.GetProperty<PropPosition>(id, "P$Position", false);
+            var doorProp = hierarchy.GetProperty<PropTransDoor>(id, "P$TransDoor", false);
             if (posProp != null && doorProp is { BlocksVision: true, Status: DoorStatus.Closed })
             {
                 doorPositions.Add(posProp.Location);
@@ -198,14 +148,9 @@ public class LightMapper
         });
     }
 
-    private void BuildLightList(LightMapperSettings settings)
+    private void BuildLightList(ResourceManager resources, ObjectHierarchy hierarchy, BrList brList)
     {
         _lights.Clear();
-
-        if (!_mission.TryGetChunk<BrList>("BRLIST", out var brList))
-        {
-            return;
-        }
 
         // TODO: Calculate the actual effective radius of infinite lights
         // potentially do the same for all lights and lower their radius if necessary?
@@ -214,22 +159,17 @@ public class LightMapper
             switch (brush.Media)
             {
                 case Media.Light:
-                    ProcessBrushLight(brush, settings);
+                    ProcessBrushLight(brush);
                     break;
                 case Media.Object:
-                    ProcessObjectLight(brush, settings);
+                    ProcessObjectLight(resources, hierarchy, brush);
                     break;
             }
         }
     }
 
-    private void BuildLightingTable()
+    private void BuildLightingTable(ObjectHierarchy hierarchy, WorldRep worldRep)
     {
-        if (!_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
-        {
-            return;
-        }
-        
         worldRep.LightingTable.Reset();
         foreach (var light in _lights)
         {
@@ -238,7 +178,7 @@ public class LightMapper
 
             if (light.Anim)
             {
-                var propAnimLight = _hierarchy.GetProperty<PropAnimLight>(light.ObjId, "P$AnimLight", false);
+                var propAnimLight = hierarchy.GetProperty<PropAnimLight>(light.ObjId, "P$AnimLight", false);
                 propAnimLight!.LightTableLightIndex = (ushort)light.LightTableIndex;
             }
 
@@ -247,14 +187,14 @@ public class LightMapper
     }
 
     // TODO: Validate in-world here? Set cell idx on lights maybe?
-    private void ValidateLightConfigurations(LightMapperSettings settings)
+    private void ValidateLightConfigurations()
     {
         var infinite = 0;
         for (var i = _lights.Count - 1; i > 0; i--)
         {
             var light = _lights[i];
 
-            if (light.QuadLit && settings.MultiSampling != SoftnessMode.Standard)
+            if (light.QuadLit && Settings.MultiSampling != SoftnessMode.Standard)
             {
                 if (light.ObjId != -1)
                 {
@@ -349,13 +289,8 @@ public class LightMapper
         }
     }
 
-    private void PostLightValidation()
+    private static void PostLightValidation(WorldRep worldRep)
     {
-        if (!_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
-        {
-            return;
-        }
-
         var overLit = 0;
         var overAnimLit = 0;
         var maxLights = 0;
@@ -404,12 +339,12 @@ public class LightMapper
         Log.Information("Max cell anim lights found ({Count}/32)", maxAnimLights);
     }
 
-    private void ProcessBrushLight(BrList.Brush brush, LightMapperSettings settings)
+    private void ProcessBrushLight(BrList.Brush brush)
     {
         var sz = brush.Size;
 
         var brightness = Math.Min(sz.X, 255.0f);
-        var saturation = sz.Z * settings.Saturation;
+        var saturation = sz.Z * Settings.Saturation;
         var light = new Light
         {
             Position = brush.Position,
@@ -426,23 +361,23 @@ public class LightMapper
         _lights.Add(light);
     }
 
-    private void ProcessObjectLight(BrList.Brush brush, LightMapperSettings settings)
+    private void ProcessObjectLight(ResourceManager resources, ObjectHierarchy hierarchy, BrList.Brush brush)
     {
         // TODO: Handle PropSpotlightAndAmbient
         var id = (int)brush.BrushInfo;
-        var propScale = _hierarchy.GetProperty<PropVector>(id, "P$Scale");
-        var propAnimLight = _hierarchy.GetProperty<PropAnimLight>(id, "P$AnimLight", false);
-        var propLight = _hierarchy.GetProperty<PropLight>(id, "P$Light", false);
-        var propLightColor = _hierarchy.GetProperty<PropLightColor>(id, "P$LightColo");
-        var propSpotlight = _hierarchy.GetProperty<PropSpotlight>(id, "P$Spotlight");
-        var propSpotAmb = _hierarchy.GetProperty<PropSpotlightAndAmbient>(id, "P$SpotAmb");
-        var propModelName = _hierarchy.GetProperty<PropLabel>(id, "P$ModelName");
-        var propJointPos = _hierarchy.GetProperty<PropJointPos>(id, "P$JointPos");
+        var propScale = hierarchy.GetProperty<PropVector>(id, "P$Scale");
+        var propAnimLight = hierarchy.GetProperty<PropAnimLight>(id, "P$AnimLight", false);
+        var propLight = hierarchy.GetProperty<PropLight>(id, "P$Light", false);
+        var propLightColor = hierarchy.GetProperty<PropLightColor>(id, "P$LightColo");
+        var propSpotlight = hierarchy.GetProperty<PropSpotlight>(id, "P$Spotlight");
+        var propSpotAmb = hierarchy.GetProperty<PropSpotlightAndAmbient>(id, "P$SpotAmb");
+        var propModelName = hierarchy.GetProperty<PropLabel>(id, "P$ModelName");
+        var propJointPos = hierarchy.GetProperty<PropJointPos>(id, "P$JointPos");
 
         // We don't want to modify the base property info!
         propLightColor ??= new PropLightColor { Hue = 0, Saturation = 0 };
         var lightHue = propLightColor.Hue;
-        var lightSaturation = propLightColor.Saturation * settings.Saturation;
+        var lightSaturation = propLightColor.Saturation * Settings.Saturation;
 
         var joints = propJointPos?.Positions ?? [0, 0, 0, 0, 0, 0];
 
@@ -456,7 +391,7 @@ public class LightMapper
 
         var vhotLightPos = Vector3.Zero;
         var vhotLightDir = -Vector3.UnitZ;
-        if (propModelName != null && _resources.TryGetModel(propModelName.Value, out var model))
+        if (propModelName != null && resources.TryGetModel(propModelName.Value, out var model))
         {
             // We don't need to apply a base transform here because we're applying it later
             var transforms = model.GetObjectTransforms(Matrix4x4.Identity, [..joints]);
@@ -563,13 +498,8 @@ public class LightMapper
         }
     }
 
-    private void SetCellLightIndices(LightMapperSettings settings)
+    private void SetCellLightIndices(WorldRep worldRep)
     {
-        if (!_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
-        {
-            return;
-        }
-
         var cellCount = worldRep.Cells.Length;
         var aabbs = new MathUtils.Aabb[worldRep.Cells.Length];
         Parallel.For(0, cellCount, i => aabbs[i] = new MathUtils.Aabb(worldRep.Cells[i].Vertices));
@@ -653,10 +583,10 @@ public class LightMapper
             cell.LightIndexCount++;
             cell.LightIndices.Add(0);
 
-            // If we have sunlight, then we just assume the sun has the potential to reach everything (ew)
+            // If we have sunlight, then we just assume the sun has the potential to reach everything (ew).
             // The sun enabled option doesn't actually seem to do anything at runtime, it's purely about if
             // the cell has the sunlight idx on it.
-            if (settings.Sunlight.Enabled)
+            if (Settings.Sunlight.Enabled)
             {
                 cell.LightIndexCount++;
                 cell.LightIndices.Add(0);
@@ -692,13 +622,8 @@ public class LightMapper
         });
     }
 
-    private void TraceScene(LightMapperSettings settings)
+    private void TraceScene(SceneTracer scene, WorldRep worldRep)
     {
-        if (!_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
-        {
-            return;
-        }
-
         Parallel.ForEach(worldRep.Cells, cell =>
         {
             // Reset cell AnimLight palette
@@ -723,14 +648,14 @@ public class LightMapper
 
                 // We have to reset the lightmaps for water, but we don't want to do anything else
                 var waterPoly = polyIdx >= solidPolys;
-                if (!settings.LightmappedWater && waterPoly)
+                if (!Settings.LightmappedWater && waterPoly)
                 {
-                    lightmap.Reset(Vector3.One * 255f, settings.Hdr);
+                    lightmap.Reset(Vector3.One * 255f, Settings.Hdr);
                     continue;
                 }
 
-                var ambientLight = settings.AmbientLight[cell.ZoneInfo.GetAmbientLightZoneIndex()];
-                lightmap.Reset(ambientLight, settings.Hdr);
+                var ambientLight = Settings.AmbientLight[cell.ZoneInfo.GetAmbientLightZoneIndex()];
+                lightmap.Reset(ambientLight, Settings.Hdr);
 
                 // Get world position of lightmap (0, 0) (+0.5 so we cast from the center of a pixel)
                 var topLeft = cell.Vertices[cell.Indices[cellIdxOffset]];
@@ -759,11 +684,11 @@ public class LightMapper
                 // TODO: Only need to generate quadweights if there's any quadlights in the mission
                 var (texU, texV) = renderPoly.TextureVectors;
                 var (offsets, weights) =
-                    GetTraceOffsetsAndWeights(settings.MultiSampling, texU, texV, settings.MultiSamplingCenterWeight);
-                var (quadOffsets, quadWeights) = settings.MultiSampling != SoftnessMode.Standard
+                    GetTraceOffsetsAndWeights(Settings.MultiSampling, texU, texV, Settings.MultiSamplingCenterWeight);
+                var (quadOffsets, quadWeights) = Settings.MultiSampling != SoftnessMode.Standard
                     ? (offsets, weights)
                     : GetTraceOffsetsAndWeights(SoftnessMode.HighFourPoint, texU, texV,
-                        settings.MultiSamplingCenterWeight);
+                        Settings.MultiSamplingCenterWeight);
 
                 for (var y = 0; y < lightmap.Height; y++)
                 {
@@ -775,27 +700,27 @@ public class LightMapper
 
                         // TODO: Handle quad lit lights better. Right now we're computing two sets of points for every
                         // luxel. Maybe it's better to only compute if we encounter a quadlit light?
-                        var tracePoints = GetTracePoints(pos, offsets, renderPoly.Center, planeMapper, v2ds);
-                        var quadTracePoints = settings.MultiSampling != SoftnessMode.Standard
+                        var tracePoints = GetTracePoints(scene, pos, offsets, renderPoly.Center, planeMapper, v2ds);
+                        var quadTracePoints = Settings.MultiSampling != SoftnessMode.Standard
                             ? tracePoints
-                            : GetTracePoints(pos, quadOffsets, renderPoly.Center, planeMapper, v2ds);
+                            : GetTracePoints(scene, pos, quadOffsets, renderPoly.Center, planeMapper, v2ds);
 
                         // This is almost perfect now. Any issues seem to be related to Dark not carrying HSB strength correctly
-                        if (settings.Sunlight.Enabled)
+                        if (Settings.Sunlight.Enabled)
                         {
                             // Check if plane normal is facing towards the light
                             // If it's not then we're never going to be (directly) lit by this
                             // light.
-                            var sunAngle = Vector3.Dot(-settings.Sunlight.Direction, plane.Normal);
+                            var sunAngle = Vector3.Dot(-Settings.Sunlight.Direction, plane.Normal);
                             if (sunAngle > 0)
                             {
                                 var strength = 0f;
-                                var targetPoints = settings.Sunlight.QuadLit ? quadTracePoints : tracePoints;
-                                var targetWeights = settings.Sunlight.QuadLit ? quadWeights : weights;
+                                var targetPoints = Settings.Sunlight.QuadLit ? quadTracePoints : tracePoints;
+                                var targetWeights = Settings.Sunlight.QuadLit ? quadWeights : weights;
                                 for (var idx = 0; idx < targetPoints.Length; idx++)
                                 {
                                     var point = targetPoints[idx];
-                                    if (_scene.TraceSun(point, -settings.Sunlight.Direction))
+                                    if (scene.TraceSun(point, -Settings.Sunlight.Direction))
                                     {
                                         // Sunlight is a simpler lighting algorithm than normal lights so we can just
                                         // do it here
@@ -805,7 +730,7 @@ public class LightMapper
 
                                 if (strength != 0f)
                                 {
-                                    lightmap.AddLight(0, x, y, settings.Sunlight.Color, strength, settings.Hdr);
+                                    lightmap.AddLight(0, x, y, Settings.Sunlight.Color, strength, Settings.Hdr);
                                 }
                             }
                         }
@@ -852,10 +777,10 @@ public class LightMapper
                                     continue;
                                 }
 
-                                if (!_scene.TraceOcclusion(SceneTracerType.TerrainAndObjects, light.Position, point))
+                                if (!scene.TraceOcclusion(SceneTracerType.TerrainAndObjects, light.Position, point))
                                 {
                                     strength += targetWeights[idx] * light.StrengthAtPoint(point, plane,
-                                        settings.AnimLightCutoff, settings.Attenuation);
+                                        Settings.AnimLightCutoff, Settings.Attenuation);
                                 }
                             }
 
@@ -883,7 +808,7 @@ public class LightMapper
                                     layer = paletteIdx + 1;
                                 }
 
-                                lightmap.AddLight(layer, x, y, light.Color, strength, settings.Hdr);
+                                lightmap.AddLight(layer, x, y, light.Color, strength, Settings.Hdr);
                             }
                         }
                     }
@@ -930,7 +855,8 @@ public class LightMapper
         };
     }
 
-    private Vector3[] GetTracePoints(
+    private static Vector3[] GetTracePoints(
+        SceneTracer scene,
         Vector3 basePosition,
         Vector3[] offsets,
         Vector3 polyCenter,
@@ -949,7 +875,7 @@ public class LightMapper
 
             // If the target lightmap point is in view of the center
             // then we can use it as-is. Using it straight fixes seams and such.
-            if (!_scene.TraceOcclusion(SceneTracerType.Terrain, polyCenter, pos))
+            if (!scene.TraceOcclusion(SceneTracerType.Terrain, polyCenter, pos))
             {
                 tracePoints[i] = pos;
                 continue;
@@ -968,9 +894,9 @@ public class LightMapper
             pos += planeMapper.Normal * MathUtils.Epsilon;
 
             // If the clipping fails, just say screw it and cast :(
-            if (_scene.TraceOcclusion(SceneTracerType.Terrain, polyCenter, pos))
+            if (scene.TraceOcclusion(SceneTracerType.Terrain, polyCenter, pos))
             {
-                var hit = _scene.Trace(SceneTracerType.Terrain, polyCenter, pos - polyCenter);
+                var hit = scene.Trace(SceneTracerType.Terrain, polyCenter, pos - polyCenter);
                 if (hit)
                 {
                     pos = hit.Position;
@@ -983,14 +909,8 @@ public class LightMapper
         return tracePoints;
     }
 
-    private void SetAnimLightCellMaps()
+    private void SetAnimLightCellMaps(WorldRep worldRep, PropertyChunk<PropAnimLight> animLightChunk)
     {
-        if (!_mission.TryGetChunk<PropertyChunk<PropAnimLight>>("P$AnimLight", out var animLightChunk) ||
-            !_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
-        {
-            return;
-        }
-
         // Now that we've set all the per-cell stuff we need to aggregate the cell mappings
         // We can't do this in parallel which is why it's being done afterwards rather than
         // as we go
