@@ -21,7 +21,7 @@ public class LightMapper
         _lights = [];
     }
 
-    public void Light(ResourceManager resources, ObjectHierarchy hierarchy, WorldRep worldRep, BrList brList, RendParams rendParams, LmParams lmParams, PropertyChunk<PropAnimLight> animLight)
+    public void Light(ResourceManager resources, ObjectHierarchy hierarchy, WorldRep worldRep, BrList brList, RendParams rendParams, LmParams lmParams)
     {
         if (Settings.AnimLightCutoff > 0)
         {
@@ -37,7 +37,7 @@ public class LightMapper
         Timing.TimeStage("Build Lighting Table", () => BuildLightingTable(hierarchy, worldRep));
         Timing.TimeStage("Set Light Visibility", () => SetCellLightIndices(worldRep));
         Timing.TimeStage("Trace Scene", () => TraceScene(scene, worldRep));
-        Timing.TimeStage("Update AnimLight Cell Mapping", () => SetAnimLightCellMaps(worldRep, animLight));
+        Timing.TimeStage("Update AnimLight Cell Mapping", () => SetAnimLightCellMaps(hierarchy, worldRep));
         Timing.TimeStage("Post-Light Validation", () => PostLightValidation(worldRep));
 
         // We always do object casting, so it's nice to let dromed know that :)
@@ -73,7 +73,6 @@ public class LightMapper
             "LM_PARAM",
             "WREXT",
             "BRLIST",
-            "P$AnimLight"
         };
 
         var allFound = true;
@@ -909,7 +908,7 @@ public class LightMapper
         return tracePoints;
     }
 
-    private void SetAnimLightCellMaps(WorldRep worldRep, PropertyChunk<PropAnimLight> animLightChunk)
+    private void SetAnimLightCellMaps(ObjectHierarchy hierarchy, WorldRep worldRep)
     {
         // Now that we've set all the per-cell stuff we need to aggregate the cell mappings
         // We can't do this in parallel which is why it's being done afterwards rather than
@@ -940,7 +939,7 @@ public class LightMapper
             // We need to update the object property so it knows its mapping range
             // TODO: Handle nulls
             var light = _lights.Find(l => l.Anim && l.LightTableIndex == lightIdx);
-            var prop = animLightChunk.Properties.Find(p => p.ObjectId == light.ObjId);
+            var prop = hierarchy.GetProperty<PropAnimLight>(light.ObjId, "P$AnimLight", false);
             prop.LightTableLightIndex = lightIdx;
             prop.LightTableMapIndex = (ushort)worldRep.LightingTable.AnimMapCount;
             prop.CellsReached = (ushort)animCellMaps.Count;

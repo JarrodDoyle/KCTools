@@ -122,8 +122,7 @@ public class RootCommand
                     !mission.TryGetChunk<WorldRep>("WREXT", out var worldRep) ||
                     !mission.TryGetChunk<RendParams>("RENDPARAMS", out var rendParams) ||
                     !mission.TryGetChunk<LmParams>("LM_PARAM", out var lmParams) ||
-                    !mission.TryGetChunk<BrList>("BRLIST", out var brList) ||
-                    !mission.TryGetChunk<PropertyChunk<PropAnimLight>>("P$AnimLight", out var animLights))
+                    !mission.TryGetChunk<BrList>("BRLIST", out var brList))
                 {
                     Log.Error("Failed to load required chunk.");
                     return ExitCode.Error;
@@ -138,7 +137,7 @@ public class RootCommand
                 }
                 else
                 {
-                    lightMapper.Light(resources, hierarchy, worldRep, brList, rendParams, lmParams, animLights);
+                    lightMapper.Light(resources, hierarchy, worldRep, brList, rendParams, lmParams);
                     if (resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
                         resources.TryGetFilePath(virtualMisPath, out var misPath))
                     {

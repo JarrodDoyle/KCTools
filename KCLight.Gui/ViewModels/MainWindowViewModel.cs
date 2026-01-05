@@ -142,8 +142,7 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
                     !mission.TryGetChunk<WorldRep>("WREXT", out var worldRep) ||
                     !mission.TryGetChunk<RendParams>("RENDPARAMS", out var rendParams) ||
                     !mission.TryGetChunk<LmParams>("LM_PARAM", out var lmParams) ||
-                    !mission.TryGetChunk<BrList>("BRLIST", out var brList) ||
-                    !mission.TryGetChunk<PropertyChunk<PropAnimLight>>("P$AnimLight", out var animLights))
+                    !mission.TryGetChunk<BrList>("BRLIST", out var brList))
                 {
                     Log.Error("Failed to load required chunk.");
                     return;
@@ -152,7 +151,7 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
                 var hierarchy = new ObjectHierarchy(_resources, mission);
                 var settings = LightMapperSettingsBuilder.FromChunks(worldRep, rendParams, lmParams);
                 var lightMapper = new LightMapper(settings);
-                lightMapper.Light(_resources, hierarchy, worldRep, brList, rendParams, lmParams, animLights);
+                lightMapper.Light(_resources, hierarchy, worldRep, brList, rendParams, lmParams);
                 if (_resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
                     _resources.TryGetFilePath(virtualMisPath, out var misPath))
                 {
