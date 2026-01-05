@@ -12,33 +12,6 @@ namespace KeepersCompound.Lighting;
 
 public class LightMapper
 {
-    // The objcast element of sunlight is ignored, we just care if it's quadlit
-    private struct SunSettings
-    {
-        public bool Enabled;
-        public bool QuadLit;
-        public Vector3 Direction;
-        public Vector3 Color;
-    }
-
-    private struct Settings
-    {
-        public Vector3[] AmbientLight;
-        public bool Hdr;
-        public float Attenuation;
-        public float Saturation;
-        public SoftnessMode MultiSampling;
-        public float MultiSamplingCenterWeight;
-        public bool LightmappedWater;
-        public SunSettings Sunlight;
-        public uint AnimLightCutoff;
-
-        public override string ToString()
-        {
-            return $"Ambient Levels: {AmbientLight}, Hdr: {Hdr}, Attenuation: {Attenuation}, Saturation: {Saturation}";
-        }
-    }
-
     private ResourceManager _resources;
     private DbFile _mission;
     private ObjectHierarchy _hierarchy;
@@ -73,7 +46,7 @@ public class LightMapper
             return;
         }
 
-        var sunlightSettings = new SunSettings
+        var sunlightSettings = new LightMapperSunSettings
         {
             Enabled = rendParams.UseSunlight,
             QuadLit = rendParams.SunlightMode is SunlightMode.QuadUnshadowed or SunlightMode.QuadObjcastShadows,
@@ -91,7 +64,7 @@ public class LightMapper
 
         // TODO: lmParams LightmappedWater doesn't mean the game will actually *use* the lightmapped water hmm
         var lmFormat = worldRep.DataHeader.LightmapFormat;
-        var settings = new Settings
+        var settings = new LightMapperSettings
         {
             Hdr = lmFormat == 2,
             AmbientLight = [..ambientLight],
@@ -146,7 +119,7 @@ public class LightMapper
                 lmParams.AnimLightCutoff);
         }
 
-        var settings = new Settings();
+        var settings = new LightMapperSettings();
         Timing.TimeStage("Gather Lights", () => BuildLightList(settings));
         Timing.TimeStage("Validate Lights", () => ValidateLightConfigurations(settings));
     }
@@ -255,7 +228,7 @@ public class LightMapper
         });
     }
 
-    private void BuildLightList(Settings settings)
+    private void BuildLightList(LightMapperSettings settings)
     {
         _lights.Clear();
 
@@ -304,7 +277,7 @@ public class LightMapper
     }
 
     // TODO: Validate in-world here? Set cell idx on lights maybe?
-    private void ValidateLightConfigurations(Settings settings)
+    private void ValidateLightConfigurations(LightMapperSettings settings)
     {
         var infinite = 0;
         for (var i = _lights.Count - 1; i > 0; i--)
@@ -461,7 +434,7 @@ public class LightMapper
         Log.Information("Max cell anim lights found ({Count}/32)", maxAnimLights);
     }
 
-    private void ProcessBrushLight(BrList.Brush brush, Settings settings)
+    private void ProcessBrushLight(BrList.Brush brush, LightMapperSettings settings)
     {
         var sz = brush.Size;
 
@@ -483,7 +456,7 @@ public class LightMapper
         _lights.Add(light);
     }
 
-    private void ProcessObjectLight(BrList.Brush brush, Settings settings)
+    private void ProcessObjectLight(BrList.Brush brush, LightMapperSettings settings)
     {
         // TODO: Handle PropSpotlightAndAmbient
         var id = (int)brush.BrushInfo;
@@ -620,7 +593,7 @@ public class LightMapper
         }
     }
 
-    private void SetCellLightIndices(Settings settings)
+    private void SetCellLightIndices(LightMapperSettings settings)
     {
         if (!_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
         {
@@ -749,7 +722,7 @@ public class LightMapper
         });
     }
 
-    private void TraceScene(Settings settings)
+    private void TraceScene(LightMapperSettings settings)
     {
         if (!_mission.TryGetChunk<WorldRep>("WREXT", out var worldRep))
         {
