@@ -1,8 +1,9 @@
 using System.Numerics;
-using System.Text;
 using DotMake.CommandLine;
 using ImageMagick;
 using KeepersCompound.Dark;
+using KeepersCompound.Dark.Database;
+using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Resources;
 using KeepersCompound.Formats.Model;
 using KeepersCompound.Lighting;
@@ -117,14 +118,26 @@ public class RootCommand
                     return ExitCode.Error;
                 }
 
-                var lightMapper = new LightMapper(resources, mission);
+                if (!LightMapper.RequiredChunksExist(mission) ||
+                    !mission.TryGetChunk<WorldRep>("WREXT", out var worldRep) ||
+                    !mission.TryGetChunk<RendParams>("RENDPARAMS", out var rendParams) ||
+                    !mission.TryGetChunk<LmParams>("LM_PARAM", out var lmParams) ||
+                    !mission.TryGetChunk<BrList>("BRLIST", out var brList))
+                {
+                    Log.Error("Failed to load required chunk.");
+                    return ExitCode.Error;
+                }
+
+                var hierarchy = new ObjectHierarchy(resources, mission);
+                var settings = LightMapperSettingsBuilder.FromChunks(worldRep, rendParams, lmParams);
+                var lightMapper = new LightMapper(settings);
                 if (Inspect)
                 {
-                    lightMapper.Inspect();
+                    lightMapper.Inspect(resources, hierarchy, brList);
                 }
                 else
                 {
-                    lightMapper.Light();
+                    lightMapper.Light(resources, hierarchy, worldRep, brList, rendParams, lmParams);
                     if (resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
                         resources.TryGetFilePath(virtualMisPath, out var misPath))
                     {

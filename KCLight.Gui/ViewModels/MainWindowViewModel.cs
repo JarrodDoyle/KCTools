@@ -10,6 +10,8 @@ using Avalonia.Platform.Storage;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using KeepersCompound.Dark;
+using KeepersCompound.Dark.Database;
+using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Resources;
 using KeepersCompound.Lighting;
 using Serilog;
@@ -136,8 +138,20 @@ public partial class MainWindowViewModel : ViewModelBase, IObserver<LogEvent>
                     return;
                 }
 
-                var lightMapper = new LightMapper(_resources, mission);
-                lightMapper.Light();
+                if (!LightMapper.RequiredChunksExist(mission) ||
+                    !mission.TryGetChunk<WorldRep>("WREXT", out var worldRep) ||
+                    !mission.TryGetChunk<RendParams>("RENDPARAMS", out var rendParams) ||
+                    !mission.TryGetChunk<LmParams>("LM_PARAM", out var lmParams) ||
+                    !mission.TryGetChunk<BrList>("BRLIST", out var brList))
+                {
+                    Log.Error("Failed to load required chunk.");
+                    return;
+                }
+
+                var hierarchy = new ObjectHierarchy(_resources, mission);
+                var settings = LightMapperSettingsBuilder.FromChunks(worldRep, rendParams, lmParams);
+                var lightMapper = new LightMapper(settings);
+                lightMapper.Light(_resources, hierarchy, worldRep, brList, rendParams, lmParams);
                 if (_resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
                     _resources.TryGetFilePath(virtualMisPath, out var misPath))
                 {

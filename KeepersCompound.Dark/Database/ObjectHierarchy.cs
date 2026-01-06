@@ -1,4 +1,5 @@
 using KeepersCompound.Dark.Database.Chunks;
+using KeepersCompound.Dark.Resources;
 using Serilog;
 
 namespace KeepersCompound.Dark.Database;
@@ -36,8 +37,17 @@ public class ObjectHierarchy
 
     private Dictionary<int, DarkObject> _objects;
 
-    public ObjectHierarchy(DbFile db, DbFile gam = null)
+    public ObjectHierarchy(ResourceManager resources, DbFile db)
     {
+        DbFile? gam = null;
+        if (db.TryGetChunk<GamFile>("GAM_FILE", out var gamFile))
+        {
+            if (!resources.TryGetDbFile(gamFile.FileName, out gam))
+            {
+                Log.Warning("Failed to find GameSys: {Path}", gamFile);
+            }
+        }
+
         _objects = new Dictionary<int, DarkObject>();
 
         bool TryGetMergedChunk<T>(string name, out T mergedChunk) where T : IMergeable
