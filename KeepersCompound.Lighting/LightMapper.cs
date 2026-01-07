@@ -499,52 +499,23 @@ public class LightMapper
 
     private void SetCellLightIndices(WorldRep worldRep)
     {
-        var cellCount = worldRep.Cells.Length;
-        var aabbs = new MathUtils.Aabb[worldRep.Cells.Length];
-        Parallel.For(0, cellCount, i => aabbs[i] = new MathUtils.Aabb(worldRep.Cells[i].Vertices));
-
         var lightCellMap = new int[_lights.Count];
         Parallel.For(0, _lights.Count, i =>
         {
-            lightCellMap[i] = -1;
-            var light = _lights[i];
-            for (var j = 0; j < cellCount; j++)
+            lightCellMap[i] = GetContainingCellId(worldRep, _lights[i].Position);
+            if (lightCellMap[i] != -1)
             {
-                if (!MathUtils.Intersects(aabbs[j], light.Position))
-                {
-                    continue;
-                }
-
-                // Half-space contained
-                var cell = worldRep.Cells[j];
-                var contained = true;
-                for (var k = 0; k < cell.PlaneCount; k++)
-                {
-                    var plane = cell.Planes[k];
-                    if (MathUtils.DistanceFromPlane(plane, light.Position) < -MathUtils.Epsilon)
-                    {
-                        contained = false;
-                        break;
-                    }
-                }
-
-                if (contained)
-                {
-                    lightCellMap[i] = j;
-                    break;
-                }
+                return;
             }
 
-            if (lightCellMap[i] == -1)
+            var light = _lights[i];
+            if (light.ObjId != -1)
             {
-                if (light.ObjId != -1)
-                {
-                    Log.Warning("Object {Id}: Light is inside solid terrain.", light.ObjId);
-                }
-                else
-                {
-                    Log.Warning("Brush at {Position}: Light is inside solid terrain.", light.Position);
-                }
+                Log.Warning("Object {Id}: Light is inside solid terrain.", light.ObjId);
+            }
+            else
+            {
+                Log.Warning("Brush at {Position}: Light is inside solid terrain.", light.Position);
             }
         });
         Log.Information("Mission has {c} lights", _lights.Count);
@@ -619,6 +590,28 @@ public class LightMapper
                 cell.LightIndices[0]++;
             }
         });
+    }
+
+    // TODO: Put this somewhere more sensible
+    private static int GetContainingCellId(WorldRep worldRep, Vector3 pos)
+    {
+        var nodeId = 0;
+        while (nodeId != 0xFFFFFF)
+        {
+            var node = worldRep.Bsp.Nodes[nodeId];
+            var flags = (node.ParentIndex >> 24) & 0xFF;
+            if ((flags & 0x01) != 0) // Leaf
+            {
+                return node.InsideIndex;
+            }
+
+            var plane = worldRep.Cells[node.CellId].Planes[node.PlaneId];
+            var dist = MathUtils.DistanceFromPlane(plane, pos);
+            var behind = (flags & 0x04) == 0 ? -dist < 0 : dist < 0;
+            nodeId = behind ? node.InsideIndex : node.OutsideIndex;
+        }
+
+        return -1;
     }
 
     private void TraceScene(SceneTracer scene, WorldRep worldRep)
