@@ -118,33 +118,31 @@ public class LightMapper
             }
         }
 
-        var cellCount = worldRep.Cells.Length;
-        Parallel.For(0, doorPositions.Count, i =>
+        foreach (var pos in doorPositions)
         {
-            var pos = doorPositions[i];
-            for (var j = 0; j < cellCount; j++)
+            // Doors can cover multiple cells, so we flood fill the blocks vision flag
+            var stack = new Stack<int>();
+            stack.Push(GetContainingCellId(worldRep, pos));
+            while (stack.TryPop(out var cellIndex))
             {
-                var cell = worldRep.Cells[j];
-                var contained = true;
-                for (var k = 0; k < cell.PlaneCount; k++)
+                if (cellIndex == -1)
                 {
-                    var plane = cell.Planes[k];
-                    if (MathUtils.DistanceFromPlane(plane, pos) < -MathUtils.Epsilon)
-                    {
-                        contained = false;
-                        break;
-                    }
+                    continue;
                 }
 
-                if (contained)
+                // We only want cells that *can* block vision, but *aren't* currently blocking vision (to avoid loops)
+                var cell = worldRep.Cells[cellIndex];
+                if ((cell.Flags & 24) == 16)
                 {
-                    cell.Flags |= 16;
                     cell.Flags |= 8;
-                    worldRep.Cells[j] = cell;
-                    Log.Debug("Updated vision blocking flags for cell: {j}", j);
+                    Log.Debug("Updated vision blocking flags for cell: {index}, {flags}", cellIndex, cell.Flags);
+                    for (var i = cell.PolyCount - cell.PortalPolyCount; i < cell.PolyCount; i++)
+                    {
+                        stack.Push(cell.Polys[i].Destination);
+                    }
                 }
             }
-        });
+        }
     }
 
     private void BuildLightList(ResourceManager resources, ObjectHierarchy hierarchy, BrList brList)
