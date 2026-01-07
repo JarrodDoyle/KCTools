@@ -542,28 +542,28 @@ public class WorldRep : IChunk
     {
         public struct Node
         {
-            private int _parentIndex; // TODO: Split the flags out of this
-            private int _cellId;
-            private int _planeId;
-            private uint _insideIndex;
-            private uint _outsideIndex;
+            public readonly int ParentIndex;
+            public readonly int CellId;
+            public readonly int PlaneId;
+            public readonly int InsideIndex;
+            public readonly int OutsideIndex;
 
             public Node(BinaryReader reader)
             {
-                _parentIndex = reader.ReadInt32();
-                _cellId = reader.ReadInt32();
-                _planeId = reader.ReadInt32();
-                _insideIndex = reader.ReadUInt32();
-                _outsideIndex = reader.ReadUInt32();
+                ParentIndex = reader.ReadInt32();
+                CellId = reader.ReadInt32();
+                PlaneId = reader.ReadInt32();
+                InsideIndex = reader.ReadInt32();
+                OutsideIndex = reader.ReadInt32();
             }
 
             public readonly void Write(BinaryWriter writer)
             {
-                writer.Write(_parentIndex);
-                writer.Write(_cellId);
-                writer.Write(_planeId);
-                writer.Write(_insideIndex);
-                writer.Write(_outsideIndex);
+                writer.Write(ParentIndex);
+                writer.Write(CellId);
+                writer.Write(PlaneId);
+                writer.Write(InsideIndex);
+                writer.Write(OutsideIndex);
             }
         }
 
