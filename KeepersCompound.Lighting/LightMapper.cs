@@ -794,7 +794,12 @@ public class LightMapper
                                         cell.AnimLights.Add((ushort)light.LightTableIndex);
                                     }
 
-                                    info.AnimLightBitmask |= 1u << paletteIdx;
+                                    // If it's over 32 then the shift ends up corrupting the bitmask
+                                    if (paletteIdx < 32)
+                                    {
+                                        info.AnimLightBitmask |= 1u << paletteIdx;
+                                    }
+
                                     layer = paletteIdx + 1;
                                 }
 
