@@ -175,7 +175,7 @@ public class InstallContext
 
         foreach (var line in lines)
         {
-            if (line.StartsWith(varName))
+            if (line.StartsWith($"{varName} "))
             {
                 value = line[(line.IndexOf(' ') + 1)..];
                 return true;
