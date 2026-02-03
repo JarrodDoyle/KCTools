@@ -37,12 +37,7 @@ public class InstallContext
         // We need to know where all the resources are
         var installCfgLines = File.ReadAllLines(configPaths[(int)ConfigFile.Install]);
         ResPaths = GetValidInstallPaths(installPath, installCfgLines, "resname_base");
-        if (ResPaths.Count == 0)
-        {
-            Log.Error("No valid {Var} found", "resname_base");
-            return;
-        }
-
+        ResPaths.Insert(0, PathUtils.ConvertSeparator(installPath));
         LoadPaths = GetValidInstallPaths(installPath, installCfgLines, "load_path");
         if (LoadPaths.Count == 0)
         {
