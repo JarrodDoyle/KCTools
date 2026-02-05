@@ -1,0 +1,16 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Library</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="DmitryBrant.ImageFormats" Version="1.0.4"/>
+        <PackageReference Include="Pfim" Version="0.11.4"/>
+        <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12"/>
+    </ItemGroup>
+
+</Project>
