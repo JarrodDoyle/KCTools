@@ -1,10 +1,10 @@
 using System.Numerics;
 using DotMake.CommandLine;
-using ImageMagick;
 using KeepersCompound.Dark;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Resources;
+using KeepersCompound.Formats.Images;
 using KeepersCompound.Formats.Model;
 using KeepersCompound.Lighting;
 using Serilog;
@@ -461,41 +461,14 @@ public class RootCommand
                     return false;
                 }
 
-                MagickImage? magickImage = null;
                 var ext = Path.GetExtension(virtualPath).ToLower();
-                switch (ext)
-                {
-                    case ".png":
-                    case ".dds":
-                    case ".bmp":
-                        magickImage = new MagickImage(stream);
-                        break;
-                    case ".pcx":
-                    case ".gif":
-                    {
-                        magickImage = new MagickImage(stream);
-                        magickImage.Alpha(AlphaOption.Set);
-                        magickImage.SetColormapColor(0, MagickColors.Transparent);
-                        break;
-                    }
-                    case ".tga":
-                    {
-                        // TGA doesn't have a signature so we have to specify the format when loading from a stream
-                        magickImage = new MagickImage(stream, MagickFormat.Tga);
-                        break;
-                    }
-                }
-
-                if (magickImage == null)
+                if (!DarkImageLoader.TryLoadImage(stream, ext, out var image))
                 {
                     Log.Warning("Cannot load texture at virtual path ({VPath}). Unsupported file type.", virtualPath);
                     return false;
                 }
 
-                using var pngStream = new MemoryStream();
-                magickImage.Format = MagickFormat.Png;
-                magickImage.Write(pngStream);
-                memoryImage = new MemoryImage(pngStream.GetBuffer());
+                memoryImage = new MemoryImage(image.Stream.GetBuffer());
                 return true;
             }
         }
