@@ -603,7 +603,9 @@ public class LightMapper
                 return node.InsideIndex;
             }
 
-            var plane = worldRep.Cells[node.CellId].Planes[node.PlaneId];
+            var plane = node.CellId >= 0
+                ? worldRep.Cells[node.CellId].Planes[node.PlaneId]
+                : worldRep.Bsp.Planes[node.PlaneId];
             var dist = MathUtils.DistanceFromPlane(plane, pos);
             var behind = (flags & 0x04) == 0 ? -dist < 0 : dist < 0;
             nodeId = behind ? node.InsideIndex : node.OutsideIndex;
