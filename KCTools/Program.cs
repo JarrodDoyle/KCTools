@@ -1,4 +1,5 @@
 using System.Numerics;
+using System.Reflection;
 using DotMake.CommandLine;
 using KeepersCompound.Dark;
 using KeepersCompound.Dark.Database;
@@ -76,6 +77,7 @@ public class RootCommand
         public int Run()
         {
             Program.ConfigureLogger(Quiet);
+            Log.Information("KCTools version: {version}", Assembly.GetEntryAssembly()?.GetName().Version);
 
             Timing.Reset();
             var exitCode = Timing.TimeStage("Total", () =>

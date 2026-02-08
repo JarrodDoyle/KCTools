@@ -1,4 +1,5 @@
 using System;
+using System.Reflection;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -52,6 +53,8 @@ public partial class MainWindow : Window
             .WriteTo.File(logPath, outputTemplate: outputTemplate)
             .WriteTo.Observers(events => events.Subscribe((DataContext as MainWindowViewModel)!))
             .CreateLogger();
+
+        Log.Information("KCTools GUI version: {version}", Assembly.GetEntryAssembly()?.GetName().Version);
 
         e.Handled = true;
     }
