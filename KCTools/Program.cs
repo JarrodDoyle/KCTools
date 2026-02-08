@@ -137,7 +137,18 @@ public class RootCommand
                 }
                 else
                 {
-                    lightMapper.Light(resources, hierarchy, worldRep, brList, rendParams, lmParams);
+                    try
+                    {
+                        lightMapper.Light(resources, hierarchy, worldRep, brList, rendParams, lmParams);
+                    }
+                    catch (Exception e)
+                    {
+                        foreach (var line in e.ToString().Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            Log.Error("{l}", line);
+                        }
+                        return ExitCode.Error;
+                    }
                     if (resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
                         resources.TryGetFilePath(virtualMisPath, out var misPath))
                     {
