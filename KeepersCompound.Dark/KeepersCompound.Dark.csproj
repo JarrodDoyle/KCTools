@@ -14,6 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\KeepersCompound.Formats\KeepersCompound.Formats.csproj" />
+    <ProjectReference Include="..\KeepersCompound.Dark.Maths\KeepersCompound.Dark.Maths.csproj" />
   </ItemGroup>
 
 </Project>

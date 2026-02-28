@@ -15,6 +15,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeepersCompound.Formats", "
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeepersCompound.Formats.Images", "KeepersCompound.Formats.Images\KeepersCompound.Formats.Images.csproj", "{9AAEC213-3310-4C82-8244-D108AAB6E0CA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KeepersCompound.Dark.Maths", "KeepersCompound.Dark.Maths\KeepersCompound.Dark.Maths.csproj", "{500B7109-C007-4670-B96B-E9C66222EC03}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -48,5 +50,9 @@ Global
 		{9AAEC213-3310-4C82-8244-D108AAB6E0CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9AAEC213-3310-4C82-8244-D108AAB6E0CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9AAEC213-3310-4C82-8244-D108AAB6E0CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{500B7109-C007-4670-B96B-E9C66222EC03}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{500B7109-C007-4670-B96B-E9C66222EC03}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{500B7109-C007-4670-B96B-E9C66222EC03}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{500B7109-C007-4670-B96B-E9C66222EC03}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

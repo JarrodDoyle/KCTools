@@ -1,9 +1,11 @@
+using System.Diagnostics;
 using System.Numerics;
 using System.Reflection;
 using DotMake.CommandLine;
 using KeepersCompound.Dark;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
+using KeepersCompound.Dark.Portalisation;
 using KeepersCompound.Dark.Resources;
 using KeepersCompound.Formats.Images;
 using KeepersCompound.Formats.Model;
@@ -15,7 +17,9 @@ using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Memory;
 using SharpGLTF.Scenes;
+using SharpGLTF.Schema2;
 using SharpGLTF.Transforms;
+using AlphaMode = SharpGLTF.Materials.AlphaMode;
 
 namespace KCTools;
 
@@ -50,6 +54,198 @@ internal static class Program
 [CliCommand(Description = "Tools for working with NewDark files.")]
 public class RootCommand
 {
+    [CliCommand(Description = "Compute base WorldRep for a NewDark .MIS/.COW")]
+    public class PortaliseCommand
+    {
+        [CliArgument(Description = "The path to the root Thief installation.")]
+        public required string InstallPath { get; set; }
+
+        [CliArgument(Description = "Mission filename including extension.")]
+        public required string MissionName { get; set; }
+
+        [CliOption(Description = "Fan mission folder name. Uses OMs if not specified.")]
+        public string? CampaignName { get; set; } = null;
+
+        [CliOption(Description = "Name of output file excluding extension. Defaults to mission name if not specified.")]
+        public string? OutputName { get; set; } = null;
+
+        [CliOption(Description = "Disable terminal output.")]
+        public bool Quiet { get; set; } = false;
+
+        [CliOption(Description = "Automatically obtain campaign name from `DromEd.log`. Overrides `--campaign-name`.")]
+        public bool AutoCampaign { get; set; } = false;
+
+        public int Run()
+        {
+            Program.ConfigureLogger(Quiet);
+            Log.Information("KCTools version: {version}", Assembly.GetEntryAssembly()?.GetName().Version);
+
+            var exportDir = $"{AppDomain.CurrentDomain.BaseDirectory}/portals/";
+            var meshPath = $"{exportDir}{OutputName}.glb";
+            if (!Directory.Exists(exportDir))
+            {
+                Directory.CreateDirectory(exportDir);
+            }
+
+            Timing.Reset();
+            var exitCode = Timing.TimeStage("Total", () =>
+            {
+                var context = Timing.TimeStage("Initialise install context", () => new InstallContext(InstallPath));
+                if (!context.Valid)
+                {
+                    Log.Error("Invalid install context");
+                    return ExitCode.Error;
+                }
+
+                if (AutoCampaign)
+                {
+                    Timing.TimeStage("Auto-detecting Campaign", CampaignFromDromedLog);
+                }
+
+                CampaignName ??= "";
+                if (CampaignName != "" && !context.Fms.Contains(CampaignName))
+                {
+                    Log.Error("Failed to find campaign: {campaign}", CampaignName);
+                    return ExitCode.Error;
+                }
+
+                var resources = Timing.TimeStage("Resource Path Gathering", () =>
+                {
+                    var resourceManager = new ResourceManager(context);
+                    resourceManager.SetActiveCampaign(CampaignName);
+                    return resourceManager;
+                });
+
+                var (loaded, mission) = Timing.TimeStage("Load Mission File", () =>
+                {
+                    var loaded = resources.TryGetDbFile(MissionName, out var mission);
+                    return (loaded, mission);
+                });
+
+                if (!loaded || mission == null)
+                {
+                    Log.Error("Failed to load mission: {name}", MissionName);
+                    return ExitCode.Error;
+                }
+
+                if (!LightMapper.RequiredChunksExist(mission) ||
+                    !mission.TryGetChunk<WorldRep>("WREXT", out var worldRep) ||
+                    !mission.TryGetChunk<BrList>("BRLIST", out var brList))
+                {
+                    Log.Error("Failed to load required chunk.");
+                    return ExitCode.Error;
+                }
+
+                var portaliser = new Portaliser(1000f);
+                var tree = Timing.TimeStage("Portalise", () => portaliser.Portalise(worldRep, brList));
+                var mesh = Timing.TimeStage("Generate GLB", () => GenerateMesh(tree, false));
+
+                Log.Information("Saving mesh: {Path}", meshPath);
+                mesh.SaveGLB(meshPath);
+                return ExitCode.Success;
+            });
+            Timing.LogAll();
+
+#if DEBUG
+            const string scriptPath = "/nvme/Dev/thief/kc-dark/KCTools/blender_import_gltf.py";
+            Process.Start("blender", ["-P", scriptPath, "--", meshPath]).WaitForExit();
+#endif
+
+            return (int)exitCode;
+        }
+
+        private void CampaignFromDromedLog()
+        {
+            try
+            {
+                Log.Information("Opening `DromEd.log`");
+
+                var path = $"{InstallPath}/DromEd.log";
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var sr = new StreamReader(fs);
+
+                while (!sr.EndOfStream)
+                {
+                    var line = sr.ReadLine();
+                    if (line == null || !line.StartsWith(": FM Path: "))
+                    {
+                        continue;
+                    }
+
+                    CampaignName = line[11..].Split(@"\").Last();
+
+                    // We don't early out here because we want to get the last occurence of an FM load
+                    // If FMSel is configured to be returned to after closing DromEd then multiple FM loads can happen
+                }
+
+                if (CampaignName != null)
+                {
+                    Log.Information("Obtained campaign name: {CampaignName}", CampaignName);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("Failed to automatically obtain campaign name.");
+            }
+        }
+
+        private ModelRoot GenerateMesh(BspNode tree, bool perCellMaterials)
+        {
+            var mat = new MaterialBuilder()
+                .WithDoubleSide(false)
+                .WithBaseColor(new Vector4(1, 1, 1, 1));
+
+            var mesh = new MeshBuilder<VertexPosition>();
+            var prim = mesh.UsePrimitive(mat);
+            var cellCount = 0;
+            var random = new Random();
+            tree.Traverse(bspNode =>
+            {
+                if (bspNode.Polys.Count == 0 || bspNode.Medium == CsgMedia.Solid)
+                {
+                    return;
+                }
+
+                if (perCellMaterials)
+                {
+                    prim = mesh.UsePrimitive(new MaterialBuilder()
+                        .WithDoubleSide(false)
+                        .WithBaseColor(new Vector4(random.NextSingle(), random.NextSingle(), random.NextSingle(), 1)));
+                }
+
+                foreach (var poly in bspNode.Polys)
+                {
+                    if (poly is { LeftNode: not null, RightNode: not null } &&
+                        poly.LeftNode.Medium == poly.RightNode.Medium)
+                    {
+                        continue;
+                    }
+
+                    var vs = poly.Winding.Vertices;
+                    for (var i = 1; i < poly.Winding.Vertices.Count - 1; i++)
+                    {
+                        prim.AddTriangle(
+                            new VertexPosition(vs[0]),
+                            new VertexPosition(vs[i + 1]),
+                            new VertexPosition(vs[i])
+                        );
+                    }
+                }
+
+                cellCount++;
+            });
+
+            Log.Information("Cell count: {C}", cellCount);
+
+            var scene = new SceneBuilder();
+            var node = new NodeBuilder();
+            scene.AddRigidMesh(mesh, node);
+            scene.ApplyBasisTransform(Matrix4x4.CreateRotationX(float.DegreesToRadians(-90)));
+
+            return scene.ToGltf2();
+        }
+    }
+
     [CliCommand(Description = "Compute lightmaps for a NewDark .MIS/.COW")]
     public class LightCommand
     {
@@ -149,8 +345,10 @@ public class RootCommand
                         {
                             Log.Error("{l}", line);
                         }
+
                         return ExitCode.Error;
                     }
+
                     if (resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
                         resources.TryGetFilePath(virtualMisPath, out var misPath))
                     {
@@ -192,7 +390,7 @@ public class RootCommand
                     }
 
                     CampaignName = line[11..].Split(@"\").Last();
-                    
+
                     // We don't early out here because we want to get the last occurence of an FM load
                     // If FMSel is configured to be returned to after closing DromEd then multiple FM loads can happen
                 }
@@ -208,7 +406,7 @@ public class RootCommand
             }
         }
     }
-    
+
     [CliCommand(Description = ".BIN model file handling")]
     public class ModelCommand
     {
@@ -226,9 +424,7 @@ public class RootCommand
             [CliOption(Description = "The name of the model.")]
             public string? ModelName { get; set; } = null;
 
-            [CliOption(
-                Description = "Folder to output exported models to. If not set models will be exported to a `models` directory alongside kctools."
-            )]
+            [CliOption(Description = "Folder to output exported models to. If not set models will be exported to a `models` directory alongside kctools.")]
             public string? OutputDirectory { get; set; } = null;
 
             [CliOption(Description = "Disable terminal output.")]
@@ -356,7 +552,7 @@ public class RootCommand
                         }
                     }
 
-                    var transform = subObject.JointType == ModelObjectType.Static  || subObject.JointIndex == -1
+                    var transform = subObject.JointType == ModelObjectType.Static || subObject.JointIndex == -1
                         ? AffineTransform.Identity
                         : AffineTransform.CreateDecomposed(subObject.Transform);
                     var node = new NodeBuilder(subObject.Name);
