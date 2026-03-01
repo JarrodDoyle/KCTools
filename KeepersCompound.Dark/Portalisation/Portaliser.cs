@@ -77,42 +77,44 @@ public class Portaliser
             var lightmapInfos = new List<WorldRep.Cell.LightmapInfo>();
             var lightmaps = new List<WorldRep.Cell.Lightmap>();
 
+            // TODO: SET THE FORMAT ON WR/USE FORMAT FROM RENDPARAMS
+            var dummyLm = new WorldRep.Cell.Lightmap(8, 8, 1, 4);
             var dummyLmInfo = new WorldRep.Cell.LightmapInfo
             {
                 PaddedWidth = 8,
                 Height = 8,
                 Width = 8,
             };
-            // TODO: SET THE FORMAT ON WR/USE FORMAT FROM RENDPARAMS
-            var dummyLm = new WorldRep.Cell.Lightmap(8, 8, 1, 4);
 
             var nonPortalVertices = 0;
-
-            var p1s = new List<int>();
-            var p2s = new List<int>();
-            var p3s = new List<int>();
+            var polyProcessOrder = new List<int>();
+            var renderPolyCount = 0;
+            var portalPolyCount = 0;
             for (var i = 0; i < node.Polys.Count; i++)
             {
-                // Interior "portals" of a merged cell are getting added YUCK
                 var poly = node.Polys[i];
                 if (poly.RightNode is { Medium: CsgMedia.Solid })
                 {
-                    p1s.Add(i);
+                    polyProcessOrder.Insert(i - portalPolyCount, i);
+                    renderPolyCount++;
                 }
                 else if (poly is { LeftNode: not null, RightNode: not null } &&
                          poly.LeftNode.Medium != poly.RightNode.Medium)
                 {
-                    p2s.Add(i);
+                    polyProcessOrder.Insert(i - portalPolyCount, i);
+                    renderPolyCount++;
+                    portalPolyCount++;
                 }
                 else
                 {
-                    p3s.Add(i);
+                    polyProcessOrder.Insert(renderPolyCount, i);
+                    portalPolyCount++;
                 }
             }
 
-            foreach (var bspPoly in p1s.Select(i => node.Polys[i]))
+            for (var i = 0; i < polyProcessOrder.Count; i++)
             {
-                nonPortalVertices += bspPoly.Winding.Vertices.Count;
+                var bspPoly = node.Polys[polyProcessOrder[i]];
                 var center = Vector3.Zero;
                 foreach (var vertex in bspPoly.Winding.Vertices)
                 {
@@ -121,72 +123,32 @@ public class Portaliser
                     vertices.Add(vertex);
                 }
 
-                planes.Add(bspPoly.Plane);
-
-                // TODO: WHAT ARE THE FLAGS?
-                polys.Add(new WorldRep.Cell.Poly
+                if (i < renderPolyCount)
                 {
-                    VertexCount = (byte)bspPoly.Winding.Vertices.Count,
-                    PlaneId = (byte)(planes.Count - 1),
-                });
-                renderPolys.Add(new WorldRep.Cell.RenderPoly
-                {
-                    TextureVectors = (Vector3.UnitX, Vector3.UnitY),
-                    TextureMagnitude = 4,
-                    Center = center / bspPoly.Winding.Vertices.Count,
-                });
+                    renderPolys.Add(new WorldRep.Cell.RenderPoly
+                    {
+                        TextureVectors = (Vector3.UnitX, Vector3.UnitY),
+                        TextureMagnitude = 4,
+                        Center = center / bspPoly.Winding.Vertices.Count,
+                    });
 
-                lightmapInfos.Add(dummyLmInfo);
-                lightmaps.Add(dummyLm);
-            }
-
-            foreach (var bspPoly in p2s.Select(i => node.Polys[i]))
-            {
-                var center = Vector3.Zero;
-                foreach (var vertex in bspPoly.Winding.Vertices)
-                {
-                    center += vertex;
-                    indices.Add((byte)vertices.Count);
-                    vertices.Add(vertex);
+                    lightmapInfos.Add(dummyLmInfo);
+                    lightmaps.Add(dummyLm);
                 }
 
                 planes.Add(bspPoly.Plane);
-
-                // TODO: WHAT ARE THE FLAGS?
+                var destination = bspPoly.RightNode!.CellId;
                 polys.Add(new WorldRep.Cell.Poly
                 {
                     VertexCount = (byte)bspPoly.Winding.Vertices.Count,
-                    Destination = (ushort)bspPoly.RightNode!.CellId,
                     PlaneId = (byte)(planes.Count - 1),
-                });
-                renderPolys.Add(new WorldRep.Cell.RenderPoly
-                {
-                    TextureVectors = (Vector3.UnitX, Vector3.UnitY),
-                    TextureMagnitude = 4,
-                    Center = center / bspPoly.Winding.Vertices.Count,
+                    Destination = (ushort)(destination == -1 ? 0 : destination),
                 });
 
-                lightmapInfos.Add(dummyLmInfo);
-                lightmaps.Add(dummyLm);
-            }
-
-            foreach (var bspPoly in p3s.Select(i => node.Polys[i]))
-            {
-                foreach (var vertex in bspPoly.Winding.Vertices)
+                if (destination == -1)
                 {
-                    indices.Add((byte)vertices.Count);
-                    vertices.Add(vertex);
+                    nonPortalVertices += bspPoly.Winding.Vertices.Count;
                 }
-
-                planes.Add(bspPoly.Plane);
-
-                // TODO: WHAT ARE THE FLAGS?
-                polys.Add(new WorldRep.Cell.Poly
-                {
-                    VertexCount = (byte)bspPoly.Winding.Vertices.Count,
-                    Destination = (ushort)bspPoly.RightNode!.CellId,
-                    PlaneId = (byte)(planes.Count - 1),
-                });
             }
 
             cells.Add(new WorldRep.Cell(
@@ -198,13 +160,23 @@ public class Portaliser
                 [..planes],
                 [..polys],
                 [..renderPolys],
-                (byte)(p2s.Count + p3s.Count),
+                (byte)portalPolyCount,
                 nonPortalVertices,
                 (ushort)vertices.Count,
                 [],
                 [..lightmapInfos],
                 [..lightmaps],
                 [0]));
+
+            if (vertices.Count > 128)
+            {
+                Log.Debug("Too many cell vertices: {N}", vertices.Count);
+            }
+
+            if (polys.Count > 64)
+            {
+                Log.Debug("Too many cell polys: {N}", polys.Count);
+            }
         });
 
         return cells;
