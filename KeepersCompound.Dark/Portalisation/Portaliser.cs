@@ -201,7 +201,13 @@ public class Portaliser
             return;
         }
 
-        foreach (var node in new[] { poly.LeftNode, poly.RightNode })
+        var rightPoly = new BspPoly(
+            poly.Plane.Inverse(),
+            poly.Winding.Reversed(),
+            poly.RightNode,
+            poly.LeftNode,
+            poly.Coplanar);
+        foreach (var (node, nodePoly) in new[] { (poly.LeftNode, poly), (poly.RightNode, rightPoly) })
         {
             var medium = node.Medium;
             if (medium is CsgMedia.Solid or CsgMedia.None)
@@ -215,13 +221,7 @@ public class Portaliser
                 targetNode = targetNode.Parent;
             }
 
-            if (node != poly.LeftNode)
-            {
-                poly.Plane = poly.Plane.Inverse();
-                poly.Winding = poly.Winding.Reversed();
-            }
-
-            targetNode.Polys.Add(poly);
+            targetNode.Polys.Add(nodePoly);
         }
     }
 }
