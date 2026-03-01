@@ -38,15 +38,10 @@ public class Portaliser
             InsertBspGeo(poly);
         }
 
-        var bspPlanes = new List<Plane>();
-        foreach (var brush in brushDefs)
-        {
-            bspPlanes.AddRange(brush.Faces.Select(face => face.Plane));
-        }
-
         var cellCount = AssignCellIds(bspTree);
         Log.Information("Assigned {CellCount} cell IDs", cellCount);
 
+        var bspPlanes = new List<Plane>();
         var wrTreeNodes = new List<WorldRep.BspTree.Node>();
         ConstructWrTreeNodes(bspPlanes, bspTree, wrTreeNodes, 0x00FFFFFF, -1);
         var wrTree = new WorldRep.BspTree
@@ -139,7 +134,7 @@ public class Portaliser
                     TextureMagnitude = 4,
                     Center = center / bspPoly.Winding.Vertices.Count,
                 });
-                
+
                 lightmapInfos.Add(dummyLmInfo);
                 lightmaps.Add(dummyLm);
             }
@@ -169,7 +164,7 @@ public class Portaliser
                     TextureMagnitude = 4,
                     Center = center / bspPoly.Winding.Vertices.Count,
                 });
-                
+
                 lightmapInfos.Add(dummyLmInfo);
                 lightmaps.Add(dummyLm);
             }
@@ -223,9 +218,10 @@ public class Portaliser
         {
             writer.Write(new byte[cell.RenderPolyCount * 4]);
         }
+
         writer.Write(0);
         var bytes = stream.ToArray();
-        
+
         var wr = new WorldRep
         {
             Header = new ChunkHeader { Name = "WREXT", Version = new Version { Major = 0, Minor = 30 } },
@@ -278,7 +274,7 @@ public class Portaliser
         {
             ParentIndex = parentIndex,
             CellId = -1,
-            PlaneId = bspPlanes.IndexOf(tree.SplitPlane),
+            PlaneId = -1,
             InsideIndex = 0x00FFFFFF,
             OutsideIndex = 0x00FFFFFF,
         };
@@ -293,6 +289,8 @@ public class Portaliser
             return;
         }
 
+        node.PlaneId = bspPlanes.Count;
+        bspPlanes.Add(tree.SplitPlane);
         nodes.Add(node);
         parentIndex = nodes.Count - 1;
         if (tree.LeftChild != null && tree.LeftChild.Medium != CsgMedia.Solid)
