@@ -1,8 +1,10 @@
 using System.Numerics;
+using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Portalisation.Brush;
 using KeepersCompound.Dark.Maths;
 using Serilog;
+using Version = KeepersCompound.Dark.Database.Version;
 
 namespace KeepersCompound.Dark.Portalisation;
 
@@ -15,7 +17,7 @@ public class Portaliser
         _worldSize = worldSize;
     }
 
-    public BspNode Portalise(WorldRep worldRep, BrList brushList)
+    public (WorldRep, BspNode) Portalise(BrList brushList)
     {
         var brushDefs = BrushListBuilder.FromChunk(brushList);
         // TODO: - Insert blockable brushes
@@ -36,7 +38,283 @@ public class Portaliser
             InsertBspGeo(poly);
         }
 
-        return bspTree;
+        var bspPlanes = new List<Plane>();
+        foreach (var brush in brushDefs)
+        {
+            bspPlanes.AddRange(brush.Faces.Select(face => face.Plane));
+        }
+
+        var cellCount = AssignCellIds(bspTree);
+        Log.Information("Assigned {CellCount} cell IDs", cellCount);
+
+        var wrTreeNodes = new List<WorldRep.BspTree.Node>();
+        ConstructWrTreeNodes(bspPlanes, bspTree, wrTreeNodes, 0x00FFFFFF, -1);
+        var wrTree = new WorldRep.BspTree
+        {
+            PlaneCount = (uint)bspPlanes.Count,
+            NodeCount = (uint)wrTreeNodes.Count,
+            Planes = bspPlanes.ToArray(),
+            Nodes = wrTreeNodes.ToArray()
+        };
+
+        var wrCells = ConstructWrCells(bspTree);
+        var wr = ConstructWr(cellCount, wrCells, wrTree);
+        return (wr, bspTree);
+    }
+
+    private List<WorldRep.Cell> ConstructWrCells(BspNode tree)
+    {
+        var cells = new List<WorldRep.Cell>();
+
+        tree.Traverse(node =>
+        {
+            if (node.CellId == -1)
+            {
+                return;
+            }
+
+            // TODO: Merge same verts, planes, etc.
+            var vertices = new List<Vector3>();
+            var indices = new List<byte>();
+            var planes = new List<Plane>();
+            var polys = new List<WorldRep.Cell.Poly>();
+            var renderPolys = new List<WorldRep.Cell.RenderPoly>();
+            var lightmapInfos = new List<WorldRep.Cell.LightmapInfo>();
+            var lightmaps = new List<WorldRep.Cell.Lightmap>();
+
+            var dummyLmInfo = new WorldRep.Cell.LightmapInfo
+            {
+                PaddedWidth = 8,
+                Height = 8,
+                Width = 8,
+            };
+            // TODO: SET THE FORMAT ON WR/USE FORMAT FROM RENDPARAMS
+            var dummyLm = new WorldRep.Cell.Lightmap(8, 8, 1, 4);
+
+            var nonPortalVertices = 0;
+
+            var p1s = new List<int>();
+            var p2s = new List<int>();
+            var p3s = new List<int>();
+            for (var i = 0; i < node.Polys.Count; i++)
+            {
+                var poly = node.Polys[i];
+                if (poly.RightNode is { Medium: CsgMedia.Solid })
+                {
+                    p1s.Add(i);
+                }
+                else if (poly is { LeftNode: not null, RightNode: not null } &&
+                         poly.LeftNode.Medium != poly.RightNode.Medium)
+                {
+                    p2s.Add(i);
+                }
+                else
+                {
+                    p3s.Add(i);
+                }
+            }
+
+            foreach (var bspPoly in p1s.Select(i => node.Polys[i]))
+            {
+                nonPortalVertices += bspPoly.Winding.Vertices.Count;
+                var center = Vector3.Zero;
+                foreach (var vertex in bspPoly.Winding.Vertices)
+                {
+                    center += vertex;
+                    indices.Add((byte)vertices.Count);
+                    vertices.Add(vertex);
+                }
+
+                planes.Add(bspPoly.Plane);
+
+                // TODO: WHAT ARE THE FLAGS?
+                polys.Add(new WorldRep.Cell.Poly
+                {
+                    VertexCount = (byte)bspPoly.Winding.Vertices.Count,
+                    PlaneId = (byte)(planes.Count - 1),
+                });
+                renderPolys.Add(new WorldRep.Cell.RenderPoly
+                {
+                    TextureVectors = (Vector3.UnitX, Vector3.UnitY),
+                    TextureMagnitude = 4,
+                    Center = center / bspPoly.Winding.Vertices.Count,
+                });
+                
+                lightmapInfos.Add(dummyLmInfo);
+                lightmaps.Add(dummyLm);
+            }
+
+            foreach (var bspPoly in p2s.Select(i => node.Polys[i]))
+            {
+                var center = Vector3.Zero;
+                foreach (var vertex in bspPoly.Winding.Vertices)
+                {
+                    center += vertex;
+                    indices.Add((byte)vertices.Count);
+                    vertices.Add(vertex);
+                }
+
+                planes.Add(bspPoly.Plane);
+
+                // TODO: WHAT ARE THE FLAGS?
+                polys.Add(new WorldRep.Cell.Poly
+                {
+                    VertexCount = (byte)bspPoly.Winding.Vertices.Count,
+                    Destination = (ushort)bspPoly.RightNode!.CellId,
+                    PlaneId = (byte)(planes.Count - 1),
+                });
+                renderPolys.Add(new WorldRep.Cell.RenderPoly
+                {
+                    TextureVectors = (Vector3.UnitX, Vector3.UnitY),
+                    TextureMagnitude = 4,
+                    Center = center / bspPoly.Winding.Vertices.Count,
+                });
+                
+                lightmapInfos.Add(dummyLmInfo);
+                lightmaps.Add(dummyLm);
+            }
+
+            foreach (var bspPoly in p3s.Select(i => node.Polys[i]))
+            {
+                foreach (var vertex in bspPoly.Winding.Vertices)
+                {
+                    indices.Add((byte)vertices.Count);
+                    vertices.Add(vertex);
+                }
+
+                planes.Add(bspPoly.Plane);
+
+                // TODO: WHAT ARE THE FLAGS?
+                polys.Add(new WorldRep.Cell.Poly
+                {
+                    VertexCount = (byte)bspPoly.Winding.Vertices.Count,
+                    Destination = (ushort)bspPoly.RightNode!.CellId,
+                    PlaneId = (byte)(planes.Count - 1),
+                });
+            }
+
+            cells.Add(new WorldRep.Cell(
+                (byte)node.Medium,
+                0,
+                0,
+                [..vertices],
+                [..indices],
+                [..planes],
+                [..polys],
+                [..renderPolys],
+                (byte)(p2s.Count + p3s.Count),
+                nonPortalVertices,
+                (ushort)vertices.Count,
+                [],
+                [..lightmapInfos],
+                [..lightmaps],
+                [0]));
+        });
+
+        return cells;
+    }
+
+    private WorldRep ConstructWr(int cellCount, List<WorldRep.Cell> cells, WorldRep.BspTree tree)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write(cellCount);
+        foreach (var cell in cells)
+        {
+            writer.Write(new byte[cell.RenderPolyCount * 4]);
+        }
+        writer.Write(0);
+        var bytes = stream.ToArray();
+        
+        var wr = new WorldRep
+        {
+            Header = new ChunkHeader { Name = "WREXT", Version = new Version { Major = 0, Minor = 30 } },
+            DataHeader = new WorldRep.WrHeader
+            {
+                Size = 20,
+                Version = 5,
+                CellCount = (uint)cellCount,
+                LightmapFormat = 1,
+            },
+            Cells = cells.ToArray(),
+            Bsp = tree,
+            CellZones = new WorldRep.CellZone[cellCount],
+            LightingTable = new WorldRep.LightTable(),
+            UnreadData = bytes,
+        };
+
+        for (var i = 0; i < cellCount; i++)
+        {
+            wr.CellZones[i] = new WorldRep.CellZone();
+        }
+
+        return wr;
+    }
+
+    private int AssignCellIds(BspNode tree)
+    {
+        var cellCount = 0;
+        tree.Traverse(node =>
+        {
+            if (node.Polys.Count > 0)
+            {
+                node.CellId = cellCount++;
+            }
+        });
+
+        return cellCount;
+    }
+
+    // TODO: Use cell based planes rather than spaffing global plane indices
+    private void ConstructWrTreeNodes(
+        List<Plane> bspPlanes,
+        BspNode tree,
+        List<WorldRep.BspTree.Node> nodes,
+        int parentIndex,
+        int cellId)
+    {
+        // According to vfig (see vfig/misdeed) Marked flag (0x2) gets cleared on load so I can just ignore it
+        var node = new WorldRep.BspTree.Node
+        {
+            ParentIndex = parentIndex,
+            CellId = -1,
+            PlaneId = bspPlanes.IndexOf(tree.SplitPlane),
+            InsideIndex = 0x00FFFFFF,
+            OutsideIndex = 0x00FFFFFF,
+        };
+
+        cellId = tree.CellId == -1 ? cellId : tree.CellId;
+        if (tree.Leaf)
+        {
+            node.ParentIndex |= 0x01 << 24;
+            node.InsideIndex = cellId;
+            node.OutsideIndex = 6331944; // I have no idea what this stands for
+            nodes.Add(node);
+            return;
+        }
+
+        nodes.Add(node);
+        parentIndex = nodes.Count - 1;
+        if (tree.LeftChild != null && tree.LeftChild.Medium != CsgMedia.Solid)
+        {
+            node.InsideIndex = nodes.Count;
+            ConstructWrTreeNodes(bspPlanes, tree.LeftChild, nodes, parentIndex, cellId);
+        }
+
+        if (tree.RightChild != null && tree.RightChild.Medium != CsgMedia.Solid)
+        {
+            node.OutsideIndex = nodes.Count;
+            ConstructWrTreeNodes(bspPlanes, tree.RightChild, nodes, parentIndex, cellId);
+        }
+
+        if (node.OutsideIndex != 0x00FFFFFF && node.InsideIndex == 0x00FFFFFF)
+        {
+            node.InsideIndex = node.OutsideIndex;
+            node.OutsideIndex = 0x00FFFFFF;
+            node.ParentIndex |= 0x4 << 24;
+        }
+
+        nodes[parentIndex] = node;
     }
 
     private void InsertBrush(BspNode node, List<BspPoly> polys, BrushDef brush)
@@ -194,6 +472,7 @@ public class Portaliser
         }.Select(p => new BspPoly(p, new Winding(p, _worldSize), root, root)).ToList();
     }
 
+    // BUG: This gives flipped faces sometimes?
     private void InsertBspGeo(BspPoly poly)
     {
         if (poly.LeftNode == null || poly.RightNode == null)

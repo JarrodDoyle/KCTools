@@ -137,18 +137,33 @@ public class RootCommand
                 }
 
                 var portaliser = new Portaliser(1000f);
-                var tree = Timing.TimeStage("Portalise", () => portaliser.Portalise(worldRep, brList));
+                var (wr, tree) = Timing.TimeStage("Portalise", () => portaliser.Portalise(brList));
+                mission.Chunks[wr.Header.Name] = wr;
                 var mesh = Timing.TimeStage("Generate GLB", () => GenerateMesh(tree, false));
-
                 Log.Information("Saving mesh: {Path}", meshPath);
                 mesh.SaveGLB(meshPath);
+
+                if (resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
+                    resources.TryGetFilePath(virtualMisPath, out var misPath))
+                {
+                    var folder = Path.GetDirectoryName(misPath);
+                    var misName = OutputName != null ? OutputName + Path.GetExtension(misPath) : MissionName;
+                    var savePath = Path.Join(folder, misName);
+                    Timing.TimeStage("Save Mission File", () => mission.Save(savePath));
+                }
+                else
+                {
+                    Log.Error("Failed to find a valid mission save path: {name}", MissionName);
+                    return ExitCode.Error;
+                }
+
                 return ExitCode.Success;
             });
             Timing.LogAll();
 
 #if DEBUG
             const string scriptPath = "/nvme/Dev/thief/kc-dark/KCTools/blender_import_gltf.py";
-            Process.Start("blender", ["-P", scriptPath, "--", meshPath]).WaitForExit();
+            // Process.Start("blender", ["-P", scriptPath, "--", meshPath]).WaitForExit();
 #endif
 
             return (int)exitCode;
@@ -258,7 +273,8 @@ public class RootCommand
         [CliOption(Description = "Fan mission folder name. Uses OMs if not specified.")]
         public string? CampaignName { get; set; } = null;
 
-        [CliOption(Description = "Name of output file excluding extension. Overwrites existing mission if not specified.")]
+        [CliOption(Description =
+            "Name of output file excluding extension. Overwrites existing mission if not specified.")]
         public string? OutputName { get; set; } = null;
 
         [CliOption(Description = "Report light configuration problems without performing any lighting.")]
@@ -424,7 +440,8 @@ public class RootCommand
             [CliOption(Description = "The name of the model.")]
             public string? ModelName { get; set; } = null;
 
-            [CliOption(Description = "Folder to output exported models to. If not set models will be exported to a `models` directory alongside kctools.")]
+            [CliOption(Description =
+                "Folder to output exported models to. If not set models will be exported to a `models` directory alongside kctools.")]
             public string? OutputDirectory { get; set; } = null;
 
             [CliOption(Description = "Disable terminal output.")]

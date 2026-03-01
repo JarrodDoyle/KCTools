@@ -17,6 +17,7 @@ public class BspNode
 
     public List<BrushDef> ContainedBrushes { get; } = [];
     public List<BspPoly> Polys { get; } = [];
+    public int CellId = -1;
 
     public BspNode(BspNode? parent)
     {

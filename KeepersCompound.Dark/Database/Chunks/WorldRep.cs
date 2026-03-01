@@ -126,6 +126,10 @@ public class WorldRep : IChunk
             public uint DynamicLightPtr { get; set; }
             public uint AnimLightBitmask { get; set; }
 
+            public LightmapInfo()
+            {
+            }
+
             public LightmapInfo(BinaryReader reader)
             {
                 Bases = (reader.ReadInt16(), reader.ReadInt16());
@@ -159,6 +163,18 @@ public class WorldRep : IChunk
             public int Width;
             public int Height;
             public int Bpp;
+
+            public Lightmap(int width, int height, int layers, int bpp)
+            {
+                Width = width;
+                Height = height;
+                Layers = layers;
+                Bpp = bpp;
+
+                _litLayers = new bool[33];
+                Pixels = new List<byte[]>(layers);
+                Reset(Vector3.One, false);
+            }
 
             public Lightmap(BinaryReader reader, byte width, byte height, uint bitmask, int bytesPerPixel)
             {
@@ -352,8 +368,8 @@ public class WorldRep : IChunk
         public byte PlaneCount { get; set; }
         public byte Medium { get; set; }
         public byte Flags { get; set; } // TODO: Make these a [Flags] enum
-        public int PortalVertices { get; set; }
-        public ushort NumVList { get; set; }
+        public int PortalVertices { get; set; } // TODO: Rename to NonPortalIndices? Unsure
+        public ushort NumVList { get; set; } // TODO: Same as IndexCount? Unsure
         public byte AnimLightCount { get; set; }
         public byte MotionIndex { get; set; }
         public Vector3 SphereCenter { get; set; }
@@ -372,6 +388,53 @@ public class WorldRep : IChunk
 
         // Bonus data to make parallel iteration of cells easier
         public CellZone ZoneInfo { get; set; } = new();
+
+        // TODO: Make this not horrific
+        public Cell(
+            byte medium, 
+            byte flags,
+            byte motionIndex,
+            Vector3[] vertices,
+            byte[] indices,
+            Plane[] planes,
+            Poly[] polys,
+            RenderPoly[] renderPolys,
+            byte portalPolyCount,
+            int portalVertices,
+            ushort numVList,
+            List<ushort> animLights,
+            LightmapInfo[] lightList,
+            Lightmap[] lightmaps,
+            List<ushort> lightIndices)
+        {
+            var c = vertices.Aggregate(Vector3.Zero, (c, v) => c + v) / vertices.Length;
+            var r = float.Sqrt(vertices.Select(v => (v - c).LengthSquared()).Prepend(0f).Max());
+
+            VertexCount = (byte)vertices.Length;
+            PolyCount = (byte)polys.Length;
+            RenderPolyCount = (byte)renderPolys.Length;
+            PortalPolyCount = portalPolyCount;
+            PlaneCount = (byte)planes.Length;
+            Medium = medium;
+            Flags = flags;
+            PortalVertices = portalVertices;
+            NumVList = numVList;
+            AnimLightCount = (byte)animLights.Count;
+            MotionIndex = motionIndex;
+            SphereCenter = c;
+            SphereRadius = r;
+            Vertices = vertices;
+            Polys = polys;
+            RenderPolys = renderPolys;
+            IndexCount = (byte)indices.Length;
+            Indices = indices;
+            Planes = planes;
+            AnimLights = animLights;
+            LightList = lightList;
+            Lightmaps = lightmaps;
+            LightIndexCount = lightIndices.Count;
+            LightIndices = lightIndices;
+        }
 
         public Cell(BinaryReader reader, int bpp)
         {
@@ -542,11 +605,11 @@ public class WorldRep : IChunk
     {
         public struct Node
         {
-            public readonly int ParentIndex;
-            public readonly int CellId;
-            public readonly int PlaneId;
-            public readonly int InsideIndex;
-            public readonly int OutsideIndex;
+            public int ParentIndex;
+            public int CellId;
+            public int PlaneId;
+            public int InsideIndex;
+            public int OutsideIndex;
 
             public Node(BinaryReader reader)
             {
@@ -666,6 +729,22 @@ public class WorldRep : IChunk
         public LightData[] ScratchpadLights;
         public List<AnimCellMap> AnimCellMaps;
 
+        public LightTable()
+        {
+            LightCount = 0;
+            DynamicLightCount = 0;
+            AnimMapCount = 0;
+            Lights = [];
+            ScratchpadLights = new LightData[32];
+            AnimCellMaps = [];
+            for (var i = 0; i < 32; i++)
+            {
+                ScratchpadLights[i] = new LightData();
+            }
+            
+            Reset();
+        }
+
         // TODO: Support olddark
         public LightTable(BinaryReader reader)
         {
@@ -747,7 +826,7 @@ public class WorldRep : IChunk
     public BspTree Bsp { get; set; }
     public CellZone[] CellZones { get; set; }
     public LightTable LightingTable { get; set; }
-    private byte[] _unreadData;
+    public byte[] UnreadData { get; set; }
 
     public void ReadData(BinaryReader reader, DbFile.TableOfContents.Entry entry)
     {
@@ -773,7 +852,7 @@ public class WorldRep : IChunk
 
         // TODO: All the other info lol
         var length = entry.Offset + entry.Size + 24 - reader.BaseStream.Position;
-        _unreadData = reader.ReadBytes((int)length);
+        UnreadData = reader.ReadBytes((int)length);
     }
 
     public void WriteData(BinaryWriter writer)
@@ -791,6 +870,6 @@ public class WorldRep : IChunk
         }
 
         LightingTable.Write(writer);
-        writer.Write(_unreadData);
+        writer.Write(UnreadData);
     }
 }
