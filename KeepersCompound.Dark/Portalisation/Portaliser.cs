@@ -93,6 +93,7 @@ public class Portaliser
             var p3s = new List<int>();
             for (var i = 0; i < node.Polys.Count; i++)
             {
+                // Interior "portals" of a merged cell are getting added YUCK
                 var poly = node.Polys[i];
                 if (poly.RightNode is { Medium: CsgMedia.Solid })
                 {
@@ -280,11 +281,11 @@ public class Portaliser
         };
 
         cellId = tree.CellId == -1 ? cellId : tree.CellId;
-        if (tree.Leaf)
+        if (tree.Leaf || tree.CellId != -1)
         {
             node.ParentIndex |= 0x01 << 24;
             node.InsideIndex = cellId;
-            node.OutsideIndex = 6331944; // I have no idea what this stands for
+            node.OutsideIndex = 0; // DromEd writes garbage here. It's just padding and means nothing
             nodes.Add(node);
             return;
         }
@@ -478,17 +479,13 @@ public class Portaliser
             return;
         }
 
-        var rightPoly = new BspPoly(
-            poly.Plane.Inverse(),
-            poly.Winding.Reversed(),
-            poly.RightNode,
-            poly.LeftNode,
-            poly.Coplanar);
-        foreach (var (node, nodePoly) in new[] { (poly.LeftNode, poly), (poly.RightNode, rightPoly) })
+        var targetNodes = new List<BspNode?>(2);
+        foreach (var node in new[] { poly.LeftNode, poly.RightNode })
         {
             var medium = node.Medium;
             if (medium is CsgMedia.Solid or CsgMedia.None)
             {
+                targetNodes.Add(null);
                 continue;
             }
 
@@ -498,7 +495,20 @@ public class Portaliser
                 targetNode = targetNode.Parent;
             }
 
-            targetNode.Polys.Add(nodePoly);
+            targetNodes.Add(targetNode);
         }
+
+        if (targetNodes[0] == targetNodes[1])
+        {
+            return;
+        }
+
+        targetNodes[0]?.Polys.Add(poly);
+        targetNodes[1]?.Polys.Add(new BspPoly(
+            poly.Plane.Inverse(),
+            poly.Winding.Reversed(),
+            poly.RightNode,
+            poly.LeftNode,
+            poly.Coplanar));
     }
 }
