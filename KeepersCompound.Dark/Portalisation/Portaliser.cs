@@ -139,8 +139,18 @@ public class Portaliser
 
                 if (i < renderPolyCount)
                 {
+                    var lMed = (CsgMedia)((int)bspPoly.LeftNode!.Medium % 3);
+                    var rMed = (CsgMedia)((int)bspPoly.RightNode!.Medium % 3);
+                    var texId = lMed switch
+                    {
+                        CsgMedia.Air when rMed == CsgMedia.Water => 247,
+                        CsgMedia.Water when rMed == CsgMedia.Air => 248,
+                        _ => 0
+                    };
+
                     renderPolys.Add(new WorldRep.Cell.RenderPoly
                     {
+                        TextureId = (ushort)texId,
                         TextureVectors = (Vector3.UnitX, Vector3.UnitY),
                         TextureMagnitude = 4,
                         Center = center / bspPoly.Winding.Vertices.Count,
