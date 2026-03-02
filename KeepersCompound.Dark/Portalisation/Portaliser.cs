@@ -137,10 +137,11 @@ public class Portaliser
                     }
                 }
 
+                var lMed = (CsgMedia)((int)bspPoly.LeftNode!.Medium % 3);
+                var rMed = (CsgMedia)((int)bspPoly.RightNode!.Medium % 3);
                 if (i < renderPolyCount)
                 {
-                    var lMed = (CsgMedia)((int)bspPoly.LeftNode!.Medium % 3);
-                    var rMed = (CsgMedia)((int)bspPoly.RightNode!.Medium % 3);
+
                     var texId = lMed switch
                     {
                         CsgMedia.Air when rMed == CsgMedia.Water => 247,
@@ -162,11 +163,18 @@ public class Portaliser
 
                 planes.Add(bspPoly.Plane);
                 var destination = bspPoly.RightNode!.CellId;
+                var clutId = lMed switch
+                {
+                    CsgMedia.Air when rMed == CsgMedia.Water => 1,
+                    CsgMedia.Water when rMed == CsgMedia.Air => 2,
+                    _ => 0
+                };
                 polys.Add(new WorldRep.Cell.Poly
                 {
                     VertexCount = (byte)bspPoly.Winding.Vertices.Count,
                     PlaneId = (byte)(planes.Count - 1),
                     Destination = (ushort)(destination == -1 ? 0 : destination),
+                    ClutId = (byte)clutId,
                 });
 
                 if (destination == -1)
