@@ -119,8 +119,22 @@ public class Portaliser
                 foreach (var vertex in bspPoly.Winding.Vertices)
                 {
                     center += vertex;
-                    indices.Add((byte)vertices.Count);
-                    vertices.Add(vertex);
+                    var existingFound = false;
+                    for (var j = 0; j < vertices.Count; j++)
+                    {
+                        if ((vertex - vertices[j]).LengthSquared() < 0.001f)
+                        {
+                            indices.Add((byte)j);
+                            existingFound = true;
+                            break;
+                        }
+                    }
+
+                    if (!existingFound)
+                    {
+                        indices.Add((byte)vertices.Count);
+                        vertices.Add(vertex);
+                    }
                 }
 
                 if (i < renderPolyCount)
