@@ -176,7 +176,7 @@ public class Portaliser
                 [..renderPolys],
                 (byte)portalPolyCount,
                 nonPortalVertices,
-                (ushort)vertices.Count,
+                (ushort)indices.Count,
                 [],
                 [..lightmapInfos],
                 [..lightmaps],
