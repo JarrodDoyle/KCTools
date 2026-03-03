@@ -161,12 +161,28 @@ public class Portaliser
                     lightmaps.Add(dummyLm);
                 }
 
-                planes.Add(bspPoly.Plane);
+                var planeId = -1;
+                for (var j = 0; j < planes.Count; j++)
+                {
+                    if (Vector3.Dot(bspPoly.Plane.Normal, planes[j].Normal) > 0.9999f &&
+                        float.Abs(bspPoly.Plane.D - planes[j].D) <= 0.001f)
+                    {
+                        planeId = j;
+                        break;
+                    }
+                }
+
+                if (planeId == -1)
+                {
+                    planeId = planes.Count;
+                    planes.Add(bspPoly.Plane);
+                }
+
                 var destination = bspPoly.RightNode!.CellId;
                 polys.Add(new WorldRep.Cell.Poly
                 {
                     VertexCount = (byte)bspPoly.Winding.Vertices.Count,
-                    PlaneId = (byte)(planes.Count - 1),
+                    PlaneId = (byte)planeId,
                     Destination = (ushort)(destination == -1 ? 0 : destination),
                     ClutId = (byte)clutId,
                     Flags = (byte)flags,
