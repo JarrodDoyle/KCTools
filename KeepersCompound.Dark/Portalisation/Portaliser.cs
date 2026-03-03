@@ -137,17 +137,18 @@ public class Portaliser
                     }
                 }
 
+                // TODO: Set flag |= 4 when non-lightmapped surface
                 var lMed = (CsgMedia)((int)bspPoly.LeftNode!.Medium % 3);
                 var rMed = (CsgMedia)((int)bspPoly.RightNode!.Medium % 3);
+                var (flags, texId, clutId) = lMed switch
+                {
+                    CsgMedia.Air when rMed == CsgMedia.Water => (16, 247, 1),
+                    CsgMedia.Water when rMed == CsgMedia.Air => (16, 248, 2),
+                    _ => (0, 0, 0)
+                };
+
                 if (i < renderPolyCount)
                 {
-                    var texId = lMed switch
-                    {
-                        CsgMedia.Air when rMed == CsgMedia.Water => 247,
-                        CsgMedia.Water when rMed == CsgMedia.Air => 248,
-                        _ => 0
-                    };
-
                     renderPolys.Add(new WorldRep.Cell.RenderPoly
                     {
                         TextureId = (ushort)texId,
@@ -160,15 +161,8 @@ public class Portaliser
                     lightmaps.Add(dummyLm);
                 }
 
-                // TODO: Set flag |= 4 when non-lightmapped surface
                 planes.Add(bspPoly.Plane);
                 var destination = bspPoly.RightNode!.CellId;
-                var (clutId, flags) = lMed switch
-                {
-                    CsgMedia.Air when rMed == CsgMedia.Water => (1, 16),
-                    CsgMedia.Water when rMed == CsgMedia.Air => (2, 16),
-                    _ => (0, 0)
-                };
                 polys.Add(new WorldRep.Cell.Poly
                 {
                     VertexCount = (byte)bspPoly.Winding.Vertices.Count,
