@@ -141,7 +141,6 @@ public class Portaliser
                 var rMed = (CsgMedia)((int)bspPoly.RightNode!.Medium % 3);
                 if (i < renderPolyCount)
                 {
-
                     var texId = lMed switch
                     {
                         CsgMedia.Air when rMed == CsgMedia.Water => 247,
@@ -161,13 +160,14 @@ public class Portaliser
                     lightmaps.Add(dummyLm);
                 }
 
+                // TODO: Set flag |= 4 when non-lightmapped surface
                 planes.Add(bspPoly.Plane);
                 var destination = bspPoly.RightNode!.CellId;
-                var clutId = lMed switch
+                var (clutId, flags) = lMed switch
                 {
-                    CsgMedia.Air when rMed == CsgMedia.Water => 1,
-                    CsgMedia.Water when rMed == CsgMedia.Air => 2,
-                    _ => 0
+                    CsgMedia.Air when rMed == CsgMedia.Water => (1, 16),
+                    CsgMedia.Water when rMed == CsgMedia.Air => (2, 16),
+                    _ => (0, 0)
                 };
                 polys.Add(new WorldRep.Cell.Poly
                 {
@@ -175,6 +175,7 @@ public class Portaliser
                     PlaneId = (byte)(planes.Count - 1),
                     Destination = (ushort)(destination == -1 ? 0 : destination),
                     ClutId = (byte)clutId,
+                    Flags = (byte)flags,
                 });
 
                 if (destination == -1)
@@ -210,7 +211,6 @@ public class Portaliser
                 Log.Debug("Too many cell polys: {N}", polys.Count);
             }
         });
-
         return cells;
     }
 
@@ -266,7 +266,7 @@ public class Portaliser
         return cellCount;
     }
 
-    // TODO: Use cell based planes rather than spaffing global plane indices
+// TODO: Use cell based planes rather than spaffing global plane indices
     private void ConstructWrTreeNodes(
         List<Plane> bspPlanes,
         BspNode tree,
@@ -475,7 +475,7 @@ public class Portaliser
         }.Select(p => new BspPoly(p, new Winding(p, _worldSize), root, root)).ToList();
     }
 
-    // BUG: This gives flipped faces sometimes?
+// BUG: This gives flipped faces sometimes?
     private void InsertBspGeo(BspPoly poly)
     {
         if (poly.LeftNode == null || poly.RightNode == null)
