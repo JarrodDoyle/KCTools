@@ -60,7 +60,6 @@ public class Portaliser
     private List<WorldRep.Cell> ConstructWrCells(BspNode tree)
     {
         var cells = new List<WorldRep.Cell>();
-
         tree.Traverse(node =>
         {
             if (node.CellId == -1)
@@ -68,158 +67,10 @@ public class Portaliser
                 return;
             }
 
-            // TODO: Merge same verts, planes, etc.
-            var vertices = new List<Vector3>();
-            var indices = new List<byte>();
-            var planes = new List<Plane>();
-            var polys = new List<WorldRep.Cell.Poly>();
-            var renderPolys = new List<WorldRep.Cell.RenderPoly>();
-            var lightmapInfos = new List<WorldRep.Cell.LightmapInfo>();
-            var lightmaps = new List<WorldRep.Cell.Lightmap>();
-
-            // TODO: SET THE FORMAT ON WR/USE FORMAT FROM RENDPARAMS
-            var dummyLm = new WorldRep.Cell.Lightmap(8, 8, 1, 4);
-            var dummyLmInfo = new WorldRep.Cell.LightmapInfo
-            {
-                PaddedWidth = 8,
-                Height = 8,
-                Width = 8,
-            };
-
-            var nonPortalVertices = 0;
-            var polyProcessOrder = new List<int>();
-            var renderPolyCount = 0;
-            var portalPolyCount = 0;
-            for (var i = 0; i < node.Polys.Count; i++)
-            {
-                var poly = node.Polys[i];
-                if (poly.RightNode is { Medium: CsgMedia.Solid })
-                {
-                    polyProcessOrder.Insert(i - portalPolyCount, i);
-                    renderPolyCount++;
-                }
-                else if (poly is { LeftNode: not null, RightNode: not null } &&
-                         poly.LeftNode.Medium != poly.RightNode.Medium)
-                {
-                    polyProcessOrder.Insert(i - portalPolyCount, i);
-                    renderPolyCount++;
-                    portalPolyCount++;
-                }
-                else
-                {
-                    polyProcessOrder.Insert(renderPolyCount, i);
-                    portalPolyCount++;
-                }
-            }
-
-            for (var i = 0; i < polyProcessOrder.Count; i++)
-            {
-                var bspPoly = node.Polys[polyProcessOrder[i]];
-                var center = Vector3.Zero;
-                foreach (var vertex in bspPoly.Winding.Vertices)
-                {
-                    center += vertex;
-                    var existingFound = false;
-                    for (var j = 0; j < vertices.Count; j++)
-                    {
-                        if ((vertex - vertices[j]).LengthSquared() < 0.001f)
-                        {
-                            indices.Add((byte)j);
-                            existingFound = true;
-                            break;
-                        }
-                    }
-
-                    if (!existingFound)
-                    {
-                        indices.Add((byte)vertices.Count);
-                        vertices.Add(vertex);
-                    }
-                }
-
-                // TODO: Set flag |= 4 when non-lightmapped surface
-                var lMed = (CsgMedia)((int)bspPoly.LeftNode!.Medium % 3);
-                var rMed = (CsgMedia)((int)bspPoly.RightNode!.Medium % 3);
-                var (flags, texId, clutId) = lMed switch
-                {
-                    CsgMedia.Air when rMed == CsgMedia.Water => (16, 247, 1),
-                    CsgMedia.Water when rMed == CsgMedia.Air => (16, 248, 2),
-                    _ => (0, 0, 0)
-                };
-
-                if (i < renderPolyCount)
-                {
-                    renderPolys.Add(new WorldRep.Cell.RenderPoly
-                    {
-                        TextureId = (ushort)texId,
-                        TextureVectors = (Vector3.UnitX, Vector3.UnitY),
-                        TextureMagnitude = 4,
-                        Center = center / bspPoly.Winding.Vertices.Count,
-                    });
-
-                    lightmapInfos.Add(dummyLmInfo);
-                    lightmaps.Add(dummyLm);
-                }
-
-                var planeId = -1;
-                for (var j = 0; j < planes.Count; j++)
-                {
-                    if (Vector3.Dot(bspPoly.Plane.Normal, planes[j].Normal) > 0.9999f &&
-                        float.Abs(bspPoly.Plane.D - planes[j].D) <= 0.001f)
-                    {
-                        planeId = j;
-                        break;
-                    }
-                }
-
-                if (planeId == -1)
-                {
-                    planeId = planes.Count;
-                    planes.Add(bspPoly.Plane);
-                }
-
-                var destination = bspPoly.RightNode!.CellId;
-                polys.Add(new WorldRep.Cell.Poly
-                {
-                    VertexCount = (byte)bspPoly.Winding.Vertices.Count,
-                    PlaneId = (byte)planeId,
-                    Destination = (ushort)(destination == -1 ? 0 : destination),
-                    ClutId = (byte)clutId,
-                    Flags = (byte)flags,
-                });
-
-                if (destination == -1)
-                {
-                    nonPortalVertices += bspPoly.Winding.Vertices.Count;
-                }
-            }
-
-            cells.Add(new WorldRep.Cell(
-                (byte)node.Medium,
-                0,
-                0,
-                [..vertices],
-                [..indices],
-                [..planes],
-                [..polys],
-                [..renderPolys],
-                (byte)portalPolyCount,
-                nonPortalVertices,
-                (ushort)indices.Count,
-                [],
-                [..lightmapInfos],
-                [..lightmaps],
-                [0]));
-
-            if (vertices.Count > 128)
-            {
-                Log.Debug("Too many cell vertices: {N}", vertices.Count);
-            }
-
-            if (polys.Count > 64)
-            {
-                Log.Debug("Too many cell polys: {N}", polys.Count);
-            }
+            var cell = new CellBuilder().AddBspPolys(node.Polys).Build(node.Medium);
+            if (cell.VertexCount > 128) Log.Debug("Too many cell vertices: {N}", cell.VertexCount);
+            if (cell.PolyCount > 64) Log.Debug("Too many cell polys: {N}", cell.PolyCount);
+            cells.Add(cell);
         });
         return cells;
     }
