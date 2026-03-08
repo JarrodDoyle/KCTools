@@ -1,5 +1,6 @@
 using System.Numerics;
 using KeepersCompound.Dark.Database.Chunks;
+using KeepersCompound.Dark.Maths;
 using Serilog;
 
 namespace KeepersCompound.Dark.Portalisation;
@@ -189,7 +190,9 @@ public class CellBuilder
                 continue;
             }
 
-            if (!NextVertexIsContained(poly, newPoly, i, j) || !NextVertexIsContained(newPoly, poly, j, i))
+            var side1 = NextVertexSide(poly, newPoly, i, j);
+            var side2 = NextVertexSide(newPoly, poly, j, i);
+            if (side1 == Side.Front || side2 == Side.Front)
             {
                 continue;
             }
@@ -198,12 +201,12 @@ public class CellBuilder
             var vs1 = poly.Winding.Vertices;
             var vs2 = newPoly.Winding.Vertices;
             var newVertices = new List<Vector3>();
-            for (var k = (i + 1) % vs1.Count; k != i; k = (k + 1) % vs1.Count)
+            for (var k = (i + (side2 == Side.On ? 2 : 1)) % vs1.Count; k != i; k = (k + 1) % vs1.Count)
             {
                 newVertices.Add(vs1[k]);
             }
 
-            for (var k = (j + 1) % vs2.Count; k != j; k = (k + 1) % vs2.Count)
+            for (var k = (j + (side1 == Side.On ? 2 : 1)) % vs2.Count; k != j; k = (k + 1) % vs2.Count)
             {
                 newVertices.Add(vs2[k]);
             }
@@ -235,13 +238,14 @@ public class CellBuilder
         return (-1, -1);
     }
 
-    private static bool NextVertexIsContained(BspPoly p1, BspPoly p2, int i, int j)
+    private static Side NextVertexSide(BspPoly p1, BspPoly p2, int i, int j)
     {
         const float epsilon = 0.001f;
         var v1 = p1.Winding.Vertices[i];
         var v2 = p1.Winding.Vertices[(i + p1.Winding.Vertices.Count - 1) % p1.Winding.Vertices.Count];
         var v3 = p2.Winding.Vertices[(j + 2) % p2.Winding.Vertices.Count];
-        return Vector3.Dot(v3 - v1, Vector3.Normalize(Vector3.Cross(p1.Plane.Normal, v1 - v2))) < epsilon;
+        var dot = Vector3.Dot(v3 - v1, Vector3.Normalize(Vector3.Cross(p1.Plane.Normal, v1 - v2)));
+        return dot < epsilon ? dot > -epsilon ? Side.On : Side.Back : Side.Front;
     }
 
     // TODO: Use for insertplane
