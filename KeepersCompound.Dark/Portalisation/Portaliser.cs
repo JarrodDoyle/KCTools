@@ -62,7 +62,7 @@ public class Portaliser
         var cells = new List<WorldRep.Cell>();
         tree.Traverse(node =>
         {
-            if (node.CellId == -1)
+            if (node.CellId == -1 || node.Polys.Count == 0)
             {
                 return;
             }
@@ -121,6 +121,10 @@ public class Portaliser
             if (node.Polys.Count > 0)
             {
                 node.CellId = cellCount++;
+            }
+            else if (node.Parent != null && node.Parent.CellId != -1)
+            {
+                node.CellId = node.Parent.CellId;
             }
         });
 
