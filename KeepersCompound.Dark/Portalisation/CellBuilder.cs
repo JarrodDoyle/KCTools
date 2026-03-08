@@ -164,16 +164,15 @@ public class CellBuilder
 
     private static void MergeOrInsert(List<BspPoly> polys, BspPoly newPoly)
     {
-        // TODO: Handle merging portals
-        if (newPoly.RightNode != null && newPoly.RightNode.Medium != CsgMedia.Solid)
-        {
-            polys.Add(newPoly);
-            return;
-        }
-
         foreach (var poly in polys)
         {
-            if (poly.RightNode != null && poly.RightNode.Medium != CsgMedia.Solid)
+            var lMed1 = (CsgMedia)((int)(poly.LeftNode?.Medium ?? CsgMedia.None) % 3);
+            var rMed1 = (CsgMedia)((int)(poly.RightNode?.Medium ?? CsgMedia.None) % 3);
+            var lMed2 = (CsgMedia)((int)(newPoly.LeftNode?.Medium ?? CsgMedia.None) % 3);
+            var rMed2 = (CsgMedia)((int)(newPoly.RightNode?.Medium ?? CsgMedia.None) % 3);
+            var dest1 = poly.RightNode?.CellId ?? -1;
+            var dest2 = newPoly.RightNode?.CellId ?? -1;
+            if (lMed1 != lMed2 || rMed1 != rMed2 || (rMed1 != CsgMedia.Solid && dest1 != dest2))
             {
                 continue;
             }
