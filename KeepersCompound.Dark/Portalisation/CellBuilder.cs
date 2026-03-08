@@ -1,5 +1,6 @@
 using System.Numerics;
 using KeepersCompound.Dark.Database.Chunks;
+using Serilog;
 
 namespace KeepersCompound.Dark.Portalisation;
 
@@ -20,7 +21,8 @@ public class CellBuilder
 
     public CellBuilder AddBspPolys(IEnumerable<BspPoly> polys)
     {
-        foreach (var poly in polys)
+        var mergedPolys = MergeBspPolys(polys);
+        foreach (var poly in mergedPolys)
         {
             var i = _bspPolys.Count;
             _bspPolys.Add(poly);
@@ -143,5 +145,117 @@ public class CellBuilder
 
         _planes.Add(plane);
         return _planes.Count - 1;
+    }
+
+    private static List<BspPoly> MergeBspPolys(IEnumerable<BspPoly> polys)
+    {
+        var mergedPolys = new List<BspPoly>();
+        var count = 0;
+        foreach (var poly in polys)
+        {
+            count++;
+            MergeOrInsert(mergedPolys, poly);
+        }
+
+        if (mergedPolys.Count != count)
+            Log.Debug("PCount: {C1}, MPCount: {C2}", count, mergedPolys.Count);
+        return mergedPolys;
+    }
+
+    private static void MergeOrInsert(List<BspPoly> polys, BspPoly newPoly)
+    {
+        // TODO: Handle merging portals
+        if (newPoly.RightNode != null && newPoly.RightNode.Medium != CsgMedia.Solid)
+        {
+            polys.Add(newPoly);
+            return;
+        }
+
+        foreach (var poly in polys)
+        {
+            if (poly.RightNode != null && poly.RightNode.Medium != CsgMedia.Solid)
+            {
+                continue;
+            }
+
+            // TODO: Handle ensuring same texture data!
+            if (!PlanesAreEqual(poly.Plane, newPoly.Plane))
+            {
+                continue;
+            }
+
+            var (i, j) = FindSharedEdge(poly.Winding.Vertices, newPoly.Winding.Vertices);
+            if (i == -1 || j == -1)
+            {
+                continue;
+            }
+
+            if (!NextVertexIsContained(poly, newPoly, i, j) || !NextVertexIsContained(newPoly, poly, j, i))
+            {
+                continue;
+            }
+
+            // Merge winding into poly!
+            var vs1 = poly.Winding.Vertices;
+            var vs2 = newPoly.Winding.Vertices;
+            var newVertices = new List<Vector3>();
+            for (var k = (i + 1) % vs1.Count; k != i; k = (k + 1) % vs1.Count)
+            {
+                newVertices.Add(vs1[k]);
+            }
+
+            for (var k = (j + 1) % vs2.Count; k != j; k = (k + 1) % vs2.Count)
+            {
+                newVertices.Add(vs2[k]);
+            }
+
+            poly.Winding.Vertices = newVertices;
+            return;
+        }
+
+        polys.Add(newPoly);
+    }
+
+    private static (int, int) FindSharedEdge(List<Vector3> vs1, List<Vector3> vs2)
+    {
+        for (var i = 0; i < vs1.Count; i++)
+        {
+            var p1 = vs1[i];
+            var p2 = vs1[(i + 1) % vs1.Count];
+            for (var j = 0; j < vs2.Count; j++)
+            {
+                var p3 = vs2[j];
+                var p4 = vs2[(j + 1) % vs2.Count];
+                if (VerticesAreEqual(p1, p4) && VerticesAreEqual(p2, p3))
+                {
+                    return (i, j);
+                }
+            }
+        }
+
+        return (-1, -1);
+    }
+
+    private static bool NextVertexIsContained(BspPoly p1, BspPoly p2, int i, int j)
+    {
+        const float epsilon = 0.001f;
+        var v1 = p1.Winding.Vertices[i];
+        var v2 = p1.Winding.Vertices[(i + p1.Winding.Vertices.Count - 1) % p1.Winding.Vertices.Count];
+        var v3 = p2.Winding.Vertices[(j + 2) % p2.Winding.Vertices.Count];
+        return Vector3.Dot(v3 - v1, Vector3.Normalize(Vector3.Cross(p1.Plane.Normal, v1 - v2))) < epsilon;
+    }
+
+    // TODO: Use for insertplane
+    private static bool PlanesAreEqual(Plane p1, Plane p2)
+    {
+        const float epsilon = 0.001f;
+        return Vector3.Dot(p1.Normal, p2.Normal) > 1 - epsilon && float.Abs(p1.D - p2.D) <= epsilon;
+    }
+
+    // TODO: Use for insertvertex
+    private static bool VerticesAreEqual(Vector3 v1, Vector3 v2)
+    {
+        const float epsilon = 0.001f;
+        return (v1 - v2).LengthSquared() < epsilon;
     }
 }
