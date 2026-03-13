@@ -45,7 +45,18 @@ public class Portaliser
         var bspPlanes = new List<Plane>();
         var wrTreeNodes = new List<WorldRep.BspTree.Node>();
         ConstructWrTreeNodes(bspPlanes, bspTree, wrTreeNodes, 0x00FFFFFF, -1);
-        var wrCells = ConstructWrCells(bspTree, bspPlanes, wrTreeNodes);
+
+        var cellBuilders = new List<CellBuilder>();
+        bspTree.Traverse(node =>
+        {
+            if (node.CellId != -1 && node.Polys.Count != 0)
+            {
+                cellBuilders.Add(new CellBuilder(node));
+            }
+        });
+        var newSplits = SplitComplexCells(cellBuilders);
+        var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell()).ToList();
+        ApplyAddedSplits(newSplits, bspPlanes, wrTreeNodes);
         var wrTree = new WorldRep.BspTree
         {
             PlaneCount = (uint)bspPlanes.Count,
@@ -57,28 +68,17 @@ public class Portaliser
         return (wr, bspTree);
     }
 
-    private List<WorldRep.Cell> ConstructWrCells(BspNode tree, List<Plane> bspPlanes,
-        List<WorldRep.BspTree.Node> wrTreeNodes)
+    private List<(Plane, int, int)> SplitComplexCells(List<CellBuilder> cells)
     {
-        var protoCells = new List<CellBuilder>();
-        tree.Traverse(node =>
-        {
-            if (node.CellId != -1 && node.Polys.Count != 0)
-            {
-                protoCells.Add(new CellBuilder(node));
-            }
-        });
-
-        // Splits cells until there's nothing left that's too complex
         var addedSplits = new List<(Plane, int, int)>(); // TODO Need more info for where to insert
         var splitOccurred = true;
         while (splitOccurred)
         {
             splitOccurred = false;
-            var cellCount = protoCells.Count;
+            var cellCount = cells.Count;
             for (var i = 0; i < cellCount; i++)
             {
-                var cell = protoCells[i];
+                var cell = cells[i];
                 if (!cell.NeedsSplit)
                 {
                     continue;
@@ -137,12 +137,7 @@ public class Portaliser
                     }
 
                     // Split the appropriate surface on destination
-                    // TODO:
-                    //  - Get the surface with destination of US and remove it
-                    //  - Construct a winding for it
-                    //  - Split the winding
-                    //  - Construct left and right surfaces and insert
-                    var destCell = protoCells[surface.Destination];
+                    var destCell = cells[surface.Destination];
                     for (var j = 0; j < destCell.Surfaces.Count; j++)
                     {
                         var destSurface = destCell.Surfaces[j];
@@ -162,7 +157,7 @@ public class Portaliser
                         var (destWindingLeft, destWindingRight) = destWinding.Split(splitPlane);
                         destCell.AddPoly(destPlane, destWindingLeft, destSurface.LeftMedia, destSurface.RightMedia, i);
                         destCell.AddPoly(destPlane, destWindingRight, destSurface.LeftMedia, destSurface.RightMedia,
-                            protoCells.Count); // new cell id
+                            cells.Count); // new cell id
                         break;
                     }
                 }
@@ -176,19 +171,26 @@ public class Portaliser
                         borderWinding.Clip(plane);
                     }
 
-                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cell.Medium, protoCells.Count);
+                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cell.Medium, cells.Count);
                     rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, cell.Medium, i);
                 }
 
-                addedSplits.Add((splitPlane, i, protoCells.Count));
-                protoCells[i] = leftCell;
-                protoCells.Add(rightCell);
+                addedSplits.Add((splitPlane, i, cells.Count));
+                cells[i] = leftCell;
+                cells.Add(rightCell);
             }
         }
 
+        return addedSplits;
+    }
+
+    private static void ApplyAddedSplits(
+        List<(Plane, int, int)> addedSplits,
+        List<Plane> bspPlanes,
+        List<WorldRep.BspTree.Node> wrTreeNodes)
+    {
         foreach (var (plane, from, to) in addedSplits)
         {
-            // foreach (var node in wrTreeNodes)
             var nodeCount = wrTreeNodes.Count;
             for (var i = 0; i < nodeCount; i++)
             {
@@ -225,10 +227,6 @@ public class Portaliser
                 break;
             }
         }
-
-        var cells = protoCells.Select(protoCell => protoCell.ToCell()).ToList();
-        Log.Debug("Generated cell count : {C}", cells.Count);
-        return cells;
     }
 
     private WorldRep ConstructWr(int cellCount, List<WorldRep.Cell> cells, WorldRep.BspTree tree)
