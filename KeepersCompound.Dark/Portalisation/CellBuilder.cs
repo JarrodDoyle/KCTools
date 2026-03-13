@@ -1,86 +1,145 @@
 using System.Numerics;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Maths;
-using Serilog;
 
 namespace KeepersCompound.Dark.Portalisation;
 
 public class CellBuilder
 {
-    private readonly List<BspPoly> _bspPolys = [];
-    private readonly List<int> _polyProcessOrder = [];
-    private int _nonPortalVertices;
-    private int _renderPolyCount;
-    private int _portalPolyCount;
-    private readonly List<Vector3> _vertices = [];
-    private readonly List<Plane> _planes = [];
-    private readonly List<byte> _indices = [];
-    private readonly List<WorldRep.Cell.Poly> _polys = [];
-    private readonly List<WorldRep.Cell.RenderPoly> _renderPolys = [];
-    private readonly List<WorldRep.Cell.LightmapInfo> _lightmapInfos = [];
-    private readonly List<WorldRep.Cell.Lightmap> _lightmaps = [];
-
-    public CellBuilder AddBspPolys(IEnumerable<BspPoly> polys)
+    public class Surface
     {
-        var mergedPolys = MergeBspPolys(polys);
-        foreach (var poly in mergedPolys)
-        {
-            var i = _bspPolys.Count;
-            _bspPolys.Add(poly);
-            if (poly.RightNode is { Medium: CsgMedia.Solid })
-            {
-                _polyProcessOrder.Insert(i - _portalPolyCount, i);
-                _renderPolyCount++;
-                _nonPortalVertices += poly.Winding.Vertices.Count;
-            }
-            else if (poly is { LeftNode: not null, RightNode: not null } &&
-                     poly.LeftNode.Medium != poly.RightNode.Medium)
-            {
-                _polyProcessOrder.Insert(i - _portalPolyCount, i);
-                _renderPolyCount++;
-                _portalPolyCount++;
-            }
-            else
-            {
-                _polyProcessOrder.Insert(_renderPolyCount, i);
-                _portalPolyCount++;
-            }
-        }
-
-        return this;
+        public required int PlaneId;
+        public required List<int> Indices;
+        public required CsgMedia LeftMedia;
+        public required CsgMedia RightMedia;
+        public required int Destination;
     }
 
-    public WorldRep.Cell Build(CsgMedia medium)
+    public bool NeedsSplit => Vertices.Count > 128 || Surfaces.Count > 64;
+    public CsgMedia Medium { get; }
+    public List<Vector3> Vertices { get; } = [];
+    public List<Plane> Planes { get; } = [];
+    public List<Surface> Surfaces { get; } = [];
+
+    public CellBuilder(CsgMedia medium)
     {
-        foreach (var index in _polyProcessOrder)
+        Medium = medium;
+    }
+
+    public CellBuilder(BspNode node)
+    {
+        Medium = node.Medium;
+
+        var mergedPolys = new List<BspPoly>();
+        foreach (var poly in node.Polys)
         {
-            ProcessPoly(_bspPolys[index]);
+            MergeOrInsert(mergedPolys, poly);
+        }
+
+        foreach (var poly in mergedPolys)
+        {
+            Surfaces.Add(new Surface
+            {
+                PlaneId = AddMergedPlane(Planes, poly.Plane),
+                Indices = poly.Winding.Vertices.Select(v => AddMergedVertex(Vertices, v)).ToList(),
+                LeftMedia = poly.LeftNode?.Medium ?? CsgMedia.None,
+                RightMedia = poly.RightNode?.Medium ?? CsgMedia.None,
+                Destination = poly.RightNode?.CellId ?? -1,
+            });
+        }
+    }
+
+    public void AddPoly(Plane plane, Winding winding, CsgMedia leftMedia, CsgMedia rightMedia, int destination)
+    {
+        Surfaces.Add(new Surface
+        {
+            PlaneId = AddMergedPlane(Planes, plane),
+            Indices = winding.Vertices.Select(v => AddMergedVertex(Vertices, v)).ToList(),
+            LeftMedia = leftMedia,
+            RightMedia = rightMedia,
+            Destination = destination,
+        });
+    }
+
+    public WorldRep.Cell ToCell()
+    {
+        var vertices = new List<Vector3>();
+        var planes = new List<Plane>();
+        var indices = new List<byte>();
+        var polys = new List<WorldRep.Cell.Poly>();
+        var renderPolys = new List<WorldRep.Cell.RenderPoly>();
+        var lmInfos = new List<WorldRep.Cell.LightmapInfo>();
+        var lms = new List<WorldRep.Cell.Lightmap>();
+        var (processOrder, nonPortalVertices, portalPolyCount) = GetSurfaceProcessInfo();
+
+        foreach (var surface in processOrder.Select(idx => Surfaces[idx]))
+        {
+            ProcessSurface(surface, vertices, planes, indices, polys, renderPolys, lmInfos, lms);
         }
 
         return new WorldRep.Cell(
-            (byte)medium,
+            (byte)Medium,
             0,
             0,
-            [.._vertices],
-            [.._indices],
-            [.._planes],
-            [.._polys],
-            [.._renderPolys],
-            (byte)_portalPolyCount,
-            _nonPortalVertices,
-            (ushort)_indices.Count,
+            [..vertices],
+            [..indices],
+            [..planes],
+            [..polys],
+            [..renderPolys],
+            (byte)portalPolyCount,
+            nonPortalVertices,
+            (ushort)indices.Count,
             [],
-            [.._lightmapInfos],
-            [.._lightmaps],
+            [..lmInfos],
+            [..lms],
             [0]);
     }
 
-    private void ProcessPoly(BspPoly bspPoly)
+    private (List<int>, int, int) GetSurfaceProcessInfo()
     {
-        var vs = bspPoly.Winding.Vertices;
-        var lMed = (CsgMedia)((int)(bspPoly.LeftNode?.Medium ?? CsgMedia.None) % 3);
-        var rMed = (CsgMedia)((int)(bspPoly.RightNode?.Medium ?? CsgMedia.None) % 3);
-        var destination = bspPoly.RightNode?.CellId ?? -1;
+        var processOrder = new List<int>(Surfaces.Count);
+        var nonPortalVertices = 0;
+        var renderPolyCount = 0;
+        var portalPolyCount = 0;
+        for (var i = 0; i < Surfaces.Count; i++)
+        {
+            var surface = Surfaces[i];
+            if (surface.RightMedia == CsgMedia.Solid)
+            {
+                processOrder.Insert(i - portalPolyCount, i);
+                renderPolyCount++;
+                nonPortalVertices += surface.Indices.Count;
+            }
+            else if (surface.LeftMedia != surface.RightMedia)
+            {
+                processOrder.Insert(i - portalPolyCount, i);
+                renderPolyCount++;
+                portalPolyCount++;
+            }
+            else
+            {
+                processOrder.Insert(renderPolyCount, i);
+                portalPolyCount++;
+            }
+        }
+
+        return (processOrder, nonPortalVertices, portalPolyCount);
+    }
+
+    private void ProcessSurface(
+        Surface surface,
+        List<Vector3> vertices,
+        List<Plane> planes,
+        List<byte> indices,
+        List<WorldRep.Cell.Poly> polys,
+        List<WorldRep.Cell.RenderPoly> renderPolys,
+        List<WorldRep.Cell.LightmapInfo> lmInfos,
+        List<WorldRep.Cell.Lightmap> lms)
+    {
+        var vs = surface.Indices.Select(vIndex => Vertices[vIndex]).ToList();
+        var lMed = (CsgMedia)((int)surface.LeftMedia % 3);
+        var rMed = (CsgMedia)((int)surface.RightMedia % 3);
+        var destination = surface.Destination;
         var (flags, texId, clutId) = lMed switch
         {
             CsgMedia.Air when rMed == CsgMedia.Water => (16, 247, 1),
@@ -88,79 +147,35 @@ public class CellBuilder
             _ => (0, 0, 0)
         };
 
-        _indices.AddRange(vs.Select(AddMergedVertex));
-        _polys.Add(new WorldRep.Cell.Poly
+        indices.AddRange(vs.Select(v => (byte)AddMergedVertex(vertices, v)));
+        polys.Add(new WorldRep.Cell.Poly
         {
-            VertexCount = (byte)bspPoly.Winding.Vertices.Count,
-            PlaneId = (byte)AddMergedPlane(bspPoly.Plane),
+            VertexCount = (byte)surface.Indices.Count,
+            PlaneId = (byte)AddMergedPlane(planes, Planes[surface.PlaneId]),
             Destination = (ushort)(destination == -1 ? 0 : destination),
             ClutId = (byte)clutId,
             Flags = (byte)flags,
         });
 
-        if (lMed != rMed)
+        if (lMed == rMed)
         {
-            _renderPolys.Add(new WorldRep.Cell.RenderPoly
-            {
-                TextureVectors = (Vector3.UnitX, Vector3.UnitY),
-                TextureMagnitude = 4,
-                Center = vs.Aggregate(Vector3.Zero, (c, v) => c + v) / vs.Count,
-                TextureId = (ushort)texId
-            });
-            _lightmaps.Add(new WorldRep.Cell.Lightmap(8, 8, 1, 4));
-            _lightmapInfos.Add(new WorldRep.Cell.LightmapInfo
-            {
-                PaddedWidth = 8,
-                Height = 8,
-                Width = 8,
-            });
-        }
-    }
-
-    private byte AddMergedVertex(Vector3 vertex)
-    {
-        const float epsilon = 0.001f;
-        for (var i = 0; i < _vertices.Count; i++)
-        {
-            if ((vertex - _vertices[i]).LengthSquared() < epsilon)
-            {
-                return (byte)i;
-            }
+            return;
         }
 
-        _vertices.Add(vertex);
-        return (byte)(_vertices.Count - 1);
-    }
-
-    private int AddMergedPlane(Plane plane)
-    {
-        const float epsilon = 0.001f;
-        for (var i = 0; i < _planes.Count; i++)
+        renderPolys.Add(new WorldRep.Cell.RenderPoly
         {
-            if (Vector3.Dot(plane.Normal, _planes[i].Normal) > 1 - epsilon &&
-                float.Abs(plane.D - _planes[i].D) <= epsilon)
-            {
-                return i;
-            }
-        }
-
-        _planes.Add(plane);
-        return _planes.Count - 1;
-    }
-
-    private static List<BspPoly> MergeBspPolys(IEnumerable<BspPoly> polys)
-    {
-        var mergedPolys = new List<BspPoly>();
-        var count = 0;
-        foreach (var poly in polys)
+            TextureVectors = (Vector3.UnitX, Vector3.UnitY),
+            TextureMagnitude = 4,
+            Center = vs.Aggregate(Vector3.Zero, (c, v) => c + v) / vs.Count,
+            TextureId = (ushort)texId
+        });
+        lms.Add(new WorldRep.Cell.Lightmap(8, 8, 1, 4));
+        lmInfos.Add(new WorldRep.Cell.LightmapInfo
         {
-            count++;
-            MergeOrInsert(mergedPolys, poly);
-        }
-
-        if (mergedPolys.Count != count)
-            Log.Debug("PCount: {C1}, MPCount: {C2}", count, mergedPolys.Count);
-        return mergedPolys;
+            PaddedWidth = 8,
+            Height = 8,
+            Width = 8,
+        });
     }
 
     private static void MergeOrInsert(List<BspPoly> polys, BspPoly newPoly)
@@ -218,6 +233,34 @@ public class CellBuilder
         polys.Add(newPoly);
     }
 
+    private static int AddMergedPlane(List<Plane> planes, Plane plane)
+    {
+        for (var i = 0; i < planes.Count; i++)
+        {
+            if (PlanesAreEqual(plane, planes[i]))
+            {
+                return i;
+            }
+        }
+
+        planes.Add(plane);
+        return planes.Count - 1;
+    }
+
+    private static int AddMergedVertex(List<Vector3> vertices, Vector3 vertex)
+    {
+        for (var i = 0; i < vertices.Count; i++)
+        {
+            if (VerticesAreEqual(vertex, vertices[i]))
+            {
+                return i;
+            }
+        }
+
+        vertices.Add(vertex);
+        return vertices.Count - 1;
+    }
+
     private static (int, int) FindSharedEdge(List<Vector3> vs1, List<Vector3> vs2)
     {
         for (var i = 0; i < vs1.Count; i++)
@@ -248,14 +291,12 @@ public class CellBuilder
         return dot < epsilon ? dot > -epsilon ? Side.On : Side.Back : Side.Front;
     }
 
-    // TODO: Use for insertplane
     private static bool PlanesAreEqual(Plane p1, Plane p2)
     {
         const float epsilon = 0.001f;
         return Vector3.Dot(p1.Normal, p2.Normal) > 1 - epsilon && float.Abs(p1.D - p2.D) <= epsilon;
     }
 
-    // TODO: Use for insertvertex
     private static bool VerticesAreEqual(Vector3 v1, Vector3 v2)
     {
         const float epsilon = 0.001f;

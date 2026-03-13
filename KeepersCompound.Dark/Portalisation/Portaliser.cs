@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using System.Numerics;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
@@ -44,6 +45,7 @@ public class Portaliser
         var bspPlanes = new List<Plane>();
         var wrTreeNodes = new List<WorldRep.BspTree.Node>();
         ConstructWrTreeNodes(bspPlanes, bspTree, wrTreeNodes, 0x00FFFFFF, -1);
+        var wrCells = ConstructWrCells(bspTree, bspPlanes, wrTreeNodes);
         var wrTree = new WorldRep.BspTree
         {
             PlaneCount = (uint)bspPlanes.Count,
@@ -51,27 +53,181 @@ public class Portaliser
             Planes = bspPlanes.ToArray(),
             Nodes = wrTreeNodes.ToArray()
         };
-
-        var wrCells = ConstructWrCells(bspTree);
-        var wr = ConstructWr(cellCount, wrCells, wrTree);
+        var wr = ConstructWr(wrCells.Count, wrCells, wrTree);
         return (wr, bspTree);
     }
 
-    private List<WorldRep.Cell> ConstructWrCells(BspNode tree)
+    private List<WorldRep.Cell> ConstructWrCells(BspNode tree, List<Plane> bspPlanes,
+        List<WorldRep.BspTree.Node> wrTreeNodes)
     {
-        var cells = new List<WorldRep.Cell>();
+        var protoCells = new List<CellBuilder>();
         tree.Traverse(node =>
         {
-            if (node.CellId == -1 || node.Polys.Count == 0)
+            if (node.CellId != -1 && node.Polys.Count != 0)
             {
-                return;
+                protoCells.Add(new CellBuilder(node));
             }
-
-            var cell = new CellBuilder().AddBspPolys(node.Polys).Build(node.Medium);
-            if (cell.VertexCount > 128) Log.Debug("Too many cell vertices: {N}", cell.VertexCount);
-            if (cell.PolyCount > 64) Log.Debug("Too many cell polys: {N}", cell.PolyCount);
-            cells.Add(cell);
         });
+
+        // Splits cells until there's nothing left that's too complex
+        var addedSplits = new List<(Plane, int, int)>(); // TODO Need more info for where to insert
+        var splitOccurred = true;
+        while (splitOccurred)
+        {
+            splitOccurred = false;
+            var cellCount = protoCells.Count;
+            for (var i = 0; i < cellCount; i++)
+            {
+                var cell = protoCells[i];
+                if (!cell.NeedsSplit)
+                {
+                    continue;
+                }
+
+                Log.Debug("Splitting complex cell {i}. Vertices {VN}, Polys {PN}", i, cell.Vertices.Count,
+                    cell.Surfaces.Count);
+                splitOccurred = true;
+
+                // Shitty splitting plane :)
+                var aabb = new Aabb();
+                aabb.AddPoints(cell.Vertices);
+                var dims = aabb.Max - aabb.Min;
+
+                Plane splitPlane;
+                if (dims.X > dims.Y && dims.X > dims.Z)
+                {
+                    splitPlane = new Plane(Vector3.UnitX, -(aabb.Min.X + dims.X / 2f));
+                }
+                else if (dims.Y > dims.X && dims.Y > dims.Z)
+                {
+                    splitPlane = new Plane(Vector3.UnitY, -(aabb.Min.Y + dims.Y / 2f));
+                }
+                else
+                {
+                    splitPlane = new Plane(Vector3.UnitZ, -(aabb.Min.Z + dims.Z / 2f));
+                }
+
+                var leftCell = new CellBuilder(cell.Medium);
+                var rightCell = new CellBuilder(cell.Medium);
+                foreach (var surface in cell.Surfaces)
+                {
+                    var winding = new Winding();
+                    foreach (var idx in surface.Indices)
+                    {
+                        winding.Vertices.Add(cell.Vertices[idx]);
+                    }
+
+                    var plane = cell.Planes[surface.PlaneId];
+                    var (leftWinding, rightWinding) = winding.Split(splitPlane);
+                    if (leftWinding.Vertices.Count > 0)
+                    {
+                        leftCell.AddPoly(plane, leftWinding, surface.LeftMedia, surface.RightMedia,
+                            surface.Destination);
+                    }
+
+                    if (rightWinding.Vertices.Count > 0)
+                    {
+                        rightCell.AddPoly(plane, rightWinding, surface.LeftMedia, surface.RightMedia,
+                            surface.Destination);
+                    }
+
+                    if (rightWinding.Vertices.Count == 0 || surface.Destination == -1)
+                    {
+                        continue;
+                    }
+
+                    // Split the appropriate surface on destination
+                    // TODO:
+                    //  - Get the surface with destination of US and remove it
+                    //  - Construct a winding for it
+                    //  - Split the winding
+                    //  - Construct left and right surfaces and insert
+                    var destCell = protoCells[surface.Destination];
+                    for (var j = 0; j < destCell.Surfaces.Count; j++)
+                    {
+                        var destSurface = destCell.Surfaces[j];
+                        if (destSurface.Destination != i)
+                        {
+                            continue;
+                        }
+
+                        destCell.Surfaces.RemoveAt(j);
+                        var destWinding = new Winding();
+                        foreach (var idx in destSurface.Indices)
+                        {
+                            destWinding.Vertices.Add(destCell.Vertices[idx]);
+                        }
+
+                        var destPlane = destCell.Planes[destSurface.PlaneId];
+                        var (destWindingLeft, destWindingRight) = destWinding.Split(splitPlane);
+                        destCell.AddPoly(destPlane, destWindingLeft, destSurface.LeftMedia, destSurface.RightMedia, i);
+                        destCell.AddPoly(destPlane, destWindingRight, destSurface.LeftMedia, destSurface.RightMedia,
+                            protoCells.Count); // new cell id
+                        break;
+                    }
+                }
+
+                // Border poly :)
+                if (leftCell.Surfaces.Count > 0 && rightCell.Surfaces.Count > 0)
+                {
+                    var borderWinding = new Winding(splitPlane, _worldSize);
+                    foreach (var plane in cell.Planes)
+                    {
+                        borderWinding.Clip(plane);
+                    }
+
+                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cell.Medium, protoCells.Count);
+                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, cell.Medium, i);
+                }
+
+                addedSplits.Add((splitPlane, i, protoCells.Count));
+                protoCells[i] = leftCell;
+                protoCells.Add(rightCell);
+            }
+        }
+
+        foreach (var (plane, from, to) in addedSplits)
+        {
+            // foreach (var node in wrTreeNodes)
+            var nodeCount = wrTreeNodes.Count;
+            for (var i = 0; i < nodeCount; i++)
+            {
+                var node = wrTreeNodes[i];
+                var flags = (node.ParentIndex >> 24) & 0xFF;
+                if ((flags & 0x01) == 0 || node.InsideIndex != from)
+                {
+                    continue;
+                }
+
+                // TODO: How to check if needs reverse flag?
+                node.ParentIndex ^= 0x01 << 24;
+                node.PlaneId = bspPlanes.Count;
+                node.InsideIndex = nodeCount;
+                node.OutsideIndex = nodeCount + 1;
+                bspPlanes.Add(plane);
+                wrTreeNodes.Add(new WorldRep.BspTree.Node
+                {
+                    ParentIndex = i | 0x01 << 24,
+                    CellId = -1,
+                    PlaneId = -1,
+                    InsideIndex = from,
+                    OutsideIndex = 0,
+                });
+                wrTreeNodes.Add(new WorldRep.BspTree.Node
+                {
+                    ParentIndex = i | 0x01 << 24,
+                    CellId = -1,
+                    PlaneId = -1,
+                    InsideIndex = to,
+                    OutsideIndex = 0,
+                });
+                wrTreeNodes[i] = node;
+                break;
+            }
+        }
+
+        var cells = protoCells.Select(protoCell => protoCell.ToCell()).ToList();
+        Log.Debug("Generated cell count : {C}", cells.Count);
         return cells;
     }
 
