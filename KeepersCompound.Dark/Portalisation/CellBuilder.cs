@@ -180,8 +180,9 @@ public class CellBuilder
 
     private static void MergeOrInsert(List<BspPoly> polys, BspPoly newPoly)
     {
-        foreach (var poly in polys)
+        for (var idx = 0; idx < polys.Count; idx++)
         {
+            var poly = polys[idx];
             var lMed1 = (CsgMedia)((int)(poly.LeftNode?.Medium ?? CsgMedia.None) % 3);
             var rMed1 = (CsgMedia)((int)(poly.RightNode?.Medium ?? CsgMedia.None) % 3);
             var lMed2 = (CsgMedia)((int)(newPoly.LeftNode?.Medium ?? CsgMedia.None) % 3);
@@ -227,7 +228,9 @@ public class CellBuilder
             }
 
             poly.Winding.Vertices = newVertices;
-            return;
+            polys.RemoveAt(idx);
+            newPoly = poly;
+            idx = -1; // It's about to get incremented to 0 by the loop, which is the value we really want
         }
 
         polys.Add(newPoly);
@@ -283,7 +286,7 @@ public class CellBuilder
 
     private static Side NextVertexSide(BspPoly p1, BspPoly p2, int i, int j)
     {
-        const float epsilon = 0.001f;
+        const float epsilon = 0.0001f;
         var v1 = p1.Winding.Vertices[i];
         var v2 = p1.Winding.Vertices[(i + p1.Winding.Vertices.Count - 1) % p1.Winding.Vertices.Count];
         var v3 = p2.Winding.Vertices[(j + 2) % p2.Winding.Vertices.Count];
@@ -293,13 +296,13 @@ public class CellBuilder
 
     private static bool PlanesAreEqual(Plane p1, Plane p2)
     {
-        const float epsilon = 0.001f;
+        const float epsilon = 0.0001f;
         return Vector3.Dot(p1.Normal, p2.Normal) > 1 - epsilon && float.Abs(p1.D - p2.D) <= epsilon;
     }
 
     private static bool VerticesAreEqual(Vector3 v1, Vector3 v2)
     {
-        const float epsilon = 0.001f;
+        const float epsilon = 0.0001f;
         return (v1 - v2).LengthSquared() < epsilon;
     }
 }
