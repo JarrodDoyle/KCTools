@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Numerics;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
@@ -389,7 +388,6 @@ public class Portaliser
             var (left, right) = SplitPolys(node, polys);
             if (left.Count > 0 && right.Count > 0)
             {
-                // TODO: Get world size here :)
                 var borderWinding = new Winding(node.SplitPlane, _worldSize);
                 foreach (var poly in polys)
                 {
