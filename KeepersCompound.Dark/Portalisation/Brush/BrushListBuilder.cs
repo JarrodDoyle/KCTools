@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using KeepersCompound.Dark.Database.Chunks;
 using Serilog;
@@ -23,111 +24,44 @@ public static class BrushListBuilder
         var brushes = new List<BrushDef>();
         foreach (var chunkBrush in chunk.Brushes)
         {
-            if (chunkBrush.Media > Media.Blockable)
-            {
-                continue;
-            }
-
-            var shape = GetShape(chunkBrush);
-            var brush = shape.Primitive switch
-            {
-                PrimitiveType.Cube => BuildCube(chunkBrush),
-                PrimitiveType.Wedge => BuildWedge(chunkBrush),
-                PrimitiveType.Cylinder => BuildCylinder(chunkBrush, shape.SideCount, shape.SideAligned),
-                PrimitiveType.Pyramid => BuildPyramid(chunkBrush, shape.SideCount, false, shape.SideAligned),
-                PrimitiveType.CornerPyramid => BuildPyramid(chunkBrush, shape.SideCount, true, shape.SideAligned),
-                _ => null,
-            };
-            if (brush != null)
+            if (chunkBrush.Media <= Media.Blockable && TryBuildBrush(chunkBrush, out var brush))
             {
                 brushes.Add(brush);
-            }
-            else
-            {
-                Log.Information("Unhandled brush: {P}", shape.Primitive);
             }
         }
 
         return brushes;
     }
 
-    private static BrushDef BuildCube(BrList.Brush chunkBrush)
+    private static bool TryBuildBrush(BrList.Brush chunkBrush, [NotNullWhen(true)] out BrushDef? brush)
     {
-        // TODO: Texture info
-        var size = chunkBrush.Size;
-        List<BrushDefFace> faces =
-        [
-            new(new(1, 0, 0, size.X), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-            new(new(0, 1, 0, size.Y), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-            new(new(-1, 0, 0, size.X), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-            new(new(0, -1, 0, size.Y), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-            new(new(0, 0, -1, size.Z), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-            new(new(0, 0, 1, size.Z), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-        ];
-
-        return new BrushDef(chunkBrush.Time, chunkBrush.Media, chunkBrush.Position, chunkBrush.Angle, faces);
-    }
-
-    private static BrushDef BuildWedge(BrList.Brush chunkBrush)
-    {
-        // TODO: Texture info
-        var size = chunkBrush.Size;
-        List<BrushDefFace> faces =
-        [
-            new(new(0, -size.Z, -size.Y, 0), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-            new(new(0, 0, 1, size.Z), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-            new(new(0, 1, 0, size.Y), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-            new(new(-1, 0, 0, size.X), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-            new(new(1, 0, 0, size.X), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero),
-        ];
-
-        return new BrushDef(chunkBrush.Time, chunkBrush.Media, chunkBrush.Position, chunkBrush.Angle, faces);
-    }
-
-    private static BrushDef BuildCylinder(BrList.Brush chunkBrush, int sides, bool faceAlign)
-    {
-        // TODO: Texture info
-        var size = chunkBrush.Size;
-        var faces = new List<BrushDefFace>();
-        var points = GetNgonPoints(sides, size.AsVector2(), faceAlign);
-        for (var i = 0; i < sides; i++)
+        var shape = GetShape(chunkBrush);
+        var planes = shape.Primitive switch
         {
-            var p1 = points[i];
-            var p2 = points[(i + 1) % sides];
-            var center = new Vector3((p1 + p2) / 2, 0);
-            var norm = Vector3.Normalize(new Vector3(p1.Y - p2.Y, p2.X - p1.X, 0));
-            var plane = new Plane(norm, -Vector3.Dot(center, norm));
-            faces.Add(new(plane, 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero));
+            PrimitiveType.Cube => GetCubePlanes(chunkBrush.Size),
+            PrimitiveType.Wedge => GetWedgePlanes(chunkBrush.Size),
+            PrimitiveType.Cylinder => GetCylinderPlanes(chunkBrush.Size, shape.SideCount, shape.SideAligned),
+            PrimitiveType.Pyramid => GetPyramidPlanes(chunkBrush.Size, shape.SideCount, false, shape.SideAligned),
+            PrimitiveType.CornerPyramid => GetPyramidPlanes(chunkBrush.Size, shape.SideCount, true, shape.SideAligned),
+            _ => [],
+        };
+
+        if (planes.Count != chunkBrush.Txs.Length)
+        {
+            Log.Information("Unhandled brush: {Id}, {P}", chunkBrush.Id, shape.Primitive);
+            brush = null;
+            return false;
         }
 
-        faces.Add(new(new(0, 0, -1, size.Z), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero));
-        faces.Add(new(new(0, 0, 1, size.Z), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero));
-        return new BrushDef(chunkBrush.Time, chunkBrush.Media, chunkBrush.Position, chunkBrush.Angle, faces);
-    }
-
-    private static BrushDef BuildPyramid(BrList.Brush chunkBrush, int sides, bool corner, bool faceAlign)
-    {
-        // TODO: Texture info
-        var size = chunkBrush.Size;
-        var faces = new List<BrushDefFace>();
-        var points = GetNgonPoints(sides, size.AsVector2(), faceAlign);
-        var top = Vector3.UnitZ * size.Z;
-        if (corner)
+        var faces = new List<BrushDefFace>(planes.Count);
+        for (var i = 0; i < planes.Count; i++)
         {
-            top += new Vector3(points[0], 0);
+            // TODO: Texture info
+            faces.Add(new(planes[i], 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero));
         }
 
-        for (var i = 0; i < sides; i++)
-        {
-            var p1 = points[i];
-            var p2 = points[(i + 1) % sides];
-            var norm = Vector3.Normalize(Vector3.Cross(top - new Vector3(p2, -size.Z), top - new Vector3(p1, -size.Z)));
-            var plane = new Plane(norm, -Vector3.Dot(top, norm));
-            faces.Add(new(plane, 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero));
-        }
-
-        faces.Add(new(new(0, 0, 1, size.Z), 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero));
-        return new BrushDef(chunkBrush.Time, chunkBrush.Media, chunkBrush.Position, chunkBrush.Angle, faces);
+        brush = new BrushDef(chunkBrush.Time, chunkBrush.Media, chunkBrush.Position, chunkBrush.Angle, faces);
+        return true;
     }
 
     private static BrushShape GetShape(BrList.Brush brush)
@@ -167,5 +101,70 @@ public static class BrushListBuilder
         }
 
         return points;
+    }
+
+    private static List<Plane> GetCubePlanes(Vector3 size)
+    {
+        return
+        [
+            new(1, 0, 0, size.X),
+            new(0, 1, 0, size.Y),
+            new(-1, 0, 0, size.X),
+            new(0, -1, 0, size.Y),
+            new(0, 0, -1, size.Z),
+            new(0, 0, 1, size.Z)
+        ];
+    }
+
+    private static List<Plane> GetWedgePlanes(Vector3 size)
+    {
+        return
+        [
+            new(0, -size.Z, -size.Y, 0),
+            new(0, 0, 1, size.Z),
+            new(0, 1, 0, size.Y),
+            new(-1, 0, 0, size.X),
+            new(1, 0, 0, size.X),
+        ];
+    }
+
+    private static List<Plane> GetCylinderPlanes(Vector3 size, int sides, bool faceAlign)
+    {
+        var planes = new List<Plane>(sides + 2);
+        var points = GetNgonPoints(sides, size.AsVector2(), faceAlign);
+        for (var i = 0; i < sides; i++)
+        {
+            var p1 = points[i];
+            var p2 = points[(i + 1) % sides];
+            var center = new Vector3((p1 + p2) / 2, 0);
+            var norm = Vector3.Normalize(new Vector3(p1.Y - p2.Y, p2.X - p1.X, 0));
+            planes.Add(new Plane(norm, -Vector3.Dot(center, norm)));
+        }
+
+        planes.Add(new(0, 0, -1, size.Z));
+        planes.Add(new(0, 0, 1, size.Z));
+        return planes;
+    }
+
+    private static List<Plane> GetPyramidPlanes(Vector3 size, int sides, bool corner, bool faceAlign)
+    {
+        var planes = new List<Plane>(sides + 1);
+        var points = GetNgonPoints(sides, size.AsVector2(), faceAlign);
+        var top = Vector3.UnitZ * size.Z;
+        if (corner)
+        {
+            top += new Vector3(points[0], 0);
+        }
+
+        for (var i = 0; i < sides; i++)
+        {
+            var p1 = points[i];
+            var p2 = points[(i + 1) % sides];
+            var norm = Vector3.Normalize(Vector3.Cross(top - new Vector3(p2, -size.Z), top - new Vector3(p1, -size.Z)));
+            planes.Add(new Plane(norm, -Vector3.Dot(top, norm)));
+        }
+
+        planes.Add(new(0, 0, 1, size.Z));
+        return planes;
     }
 }
