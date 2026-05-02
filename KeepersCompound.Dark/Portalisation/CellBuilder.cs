@@ -1,6 +1,7 @@
 using System.Numerics;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Maths;
+using KeepersCompound.Dark.Portalisation.Brush;
 
 namespace KeepersCompound.Dark.Portalisation;
 
@@ -13,6 +14,7 @@ public class CellBuilder
         public required CsgMedia LeftMedia;
         public required CsgMedia RightMedia;
         public required int Destination;
+        public required (int, int) BrushFace;
     }
 
     public bool NeedsSplit => Vertices.Count > 128 || Surfaces.Count > 64;
@@ -45,11 +47,13 @@ public class CellBuilder
                 LeftMedia = poly.LeftNode?.Medium ?? CsgMedia.None,
                 RightMedia = poly.RightNode?.Medium ?? CsgMedia.None,
                 Destination = poly.RightNode?.CellId ?? -1,
+                BrushFace = poly.BrushFace,
             });
         }
     }
 
-    public void AddPoly(Plane plane, Winding winding, CsgMedia leftMedia, CsgMedia rightMedia, int destination)
+    public void AddPoly(Plane plane, Winding winding, CsgMedia leftMedia, CsgMedia rightMedia, int destination,
+        (int, int) face)
     {
         Surfaces.Add(new Surface
         {
@@ -58,10 +62,11 @@ public class CellBuilder
             LeftMedia = leftMedia,
             RightMedia = rightMedia,
             Destination = destination,
+            BrushFace = face,
         });
     }
 
-    public WorldRep.Cell ToCell()
+    public WorldRep.Cell ToCell(List<BrushDef> brushes)
     {
         var vertices = new List<Vector3>();
         var planes = new List<Plane>();
@@ -74,7 +79,7 @@ public class CellBuilder
 
         foreach (var surface in processOrder.Select(idx => Surfaces[idx]))
         {
-            ProcessSurface(surface, vertices, planes, indices, polys, renderPolys, lmInfos, lms);
+            ProcessSurface(brushes, surface, vertices, planes, indices, polys, renderPolys, lmInfos, lms);
         }
 
         return new WorldRep.Cell(
@@ -127,6 +132,7 @@ public class CellBuilder
     }
 
     private void ProcessSurface(
+        List<BrushDef> brushes,
         Surface surface,
         List<Vector3> vertices,
         List<Plane> planes,
@@ -147,6 +153,15 @@ public class CellBuilder
             _ => (0, 0, 0)
         };
 
+        var brushIndex = surface.BrushFace.Item1;
+        var faceIndex = surface.BrushFace.Item2;
+        if (texId == 0 &&
+            brushIndex >= 0 && brushIndex < brushes.Count &&
+            faceIndex >= 0 && faceIndex < brushes[brushIndex].Faces.Count)
+        {
+            texId = brushes[brushIndex].Faces[faceIndex].TextureId;
+        }
+
         indices.AddRange(vs.Select(v => (byte)AddMergedVertex(vertices, v)));
         polys.Add(new WorldRep.Cell.Poly
         {
@@ -162,9 +177,18 @@ public class CellBuilder
             return;
         }
 
+        // This is wholy inaccurate, but just to make things vaguely identifiable on every face
+        var planeNorm = Planes[surface.PlaneId].Normal;
+        var p0 = vs[0];
+        var p1 = vs[1];
+        var xAxis = p1 - p0;
+        var yAxis = Vector3.Cross(planeNorm, xAxis);
+        xAxis = Vector3.Normalize(xAxis);
+        yAxis = Vector3.Normalize(yAxis);
+
         renderPolys.Add(new WorldRep.Cell.RenderPoly
         {
-            TextureVectors = (Vector3.UnitX, Vector3.UnitY),
+            TextureVectors = (xAxis, yAxis),
             TextureMagnitude = 4,
             Center = vs.Aggregate(Vector3.Zero, (c, v) => c + v) / vs.Count,
             TextureId = (ushort)texId

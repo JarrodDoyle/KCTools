@@ -21,9 +21,9 @@ public class BrushDef
         Faces = faces;
     }
 
-    public List<BspPoly> BuildPolys(float worldSize)
+    public List<TreeInsertionPoly> BuildInsertionPolys(float worldSize)
     {
-        var polys = new List<BspPoly>();
+        var polys = new List<TreeInsertionPoly>();
         for (var i = 0; i < Faces.Count; i++)
         {
             var winding = new Winding(Faces[i].Plane, worldSize);
@@ -33,7 +33,7 @@ public class BrushDef
                 winding.Clip(Faces[j].Plane);
             }
 
-            polys.Add(new BspPoly(Faces[i].Plane, winding));
+            polys.Add(new TreeInsertionPoly(Faces[i].Plane, winding, false, (Time - 1, i)));
         }
 
         // Transform planes and windings

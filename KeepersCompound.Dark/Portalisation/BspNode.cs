@@ -13,6 +13,7 @@ public class BspNode
     public BspNode? LeftChild { get; set; }
     public BspNode? RightChild { get; set; }
 
+    public (int, int) BrushFace { get; set; } = (-1, -1);
     public List<BrushDef> ContainedBrushes { get; } = [];
     public List<BspPoly> Polys { get; } = [];
     public int CellId = -1;

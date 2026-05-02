@@ -25,7 +25,7 @@ public class Portaliser
         var bspTree = new BspNode(null);
         foreach (var brush in brushDefs)
         {
-            InsertBrush(bspTree, brush.BuildPolys(_worldSize), brush);
+            InsertBrush(bspTree, brush.BuildInsertionPolys(_worldSize), brush);
         }
 
         Log.Information("Inserted {N} brushes.", brushDefs.Count);
@@ -54,7 +54,7 @@ public class Portaliser
             }
         });
         var newSplits = SplitComplexCells(cellBuilders);
-        var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell()).ToList();
+        var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell(brushDefs)).ToList();
         ApplyAddedSplits(newSplits, bspPlanes, wrTreeNodes);
         var wrTree = new WorldRep.BspTree
         {
@@ -121,13 +121,13 @@ public class Portaliser
                     if (leftWinding.Vertices.Count > 0)
                     {
                         leftCell.AddPoly(plane, leftWinding, surface.LeftMedia, surface.RightMedia,
-                            surface.Destination);
+                            surface.Destination, surface.BrushFace);
                     }
 
                     if (rightWinding.Vertices.Count > 0)
                     {
                         rightCell.AddPoly(plane, rightWinding, surface.LeftMedia, surface.RightMedia,
-                            surface.Destination);
+                            surface.Destination, surface.BrushFace);
                     }
 
                     if (rightWinding.Vertices.Count == 0 || surface.Destination == -1)
@@ -154,9 +154,9 @@ public class Portaliser
 
                         var destPlane = destCell.Planes[destSurface.PlaneId];
                         var (destWindingLeft, destWindingRight) = destWinding.Split(splitPlane);
-                        destCell.AddPoly(destPlane, destWindingLeft, destSurface.LeftMedia, destSurface.RightMedia, i);
+                        destCell.AddPoly(destPlane, destWindingLeft, destSurface.LeftMedia, destSurface.RightMedia, i, destSurface.BrushFace);
                         destCell.AddPoly(destPlane, destWindingRight, destSurface.LeftMedia, destSurface.RightMedia,
-                            cells.Count); // new cell id
+                            cells.Count, destSurface.BrushFace); // new cell id
                         break;
                     }
                 }
@@ -170,8 +170,8 @@ public class Portaliser
                         borderWinding.Clip(plane);
                     }
 
-                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cell.Medium, cells.Count);
-                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, cell.Medium, i);
+                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cell.Medium, cells.Count, (-1, -1));
+                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, cell.Medium, i, (-1, -1));
                 }
 
                 addedSplits.Add((splitPlane, i, cells.Count));
@@ -338,7 +338,7 @@ public class Portaliser
         nodes[parentIndex] = node;
     }
 
-    private void InsertBrush(BspNode node, List<BspPoly> polys, BrushDef brush)
+    private void InsertBrush(BspNode node, List<TreeInsertionPoly> polys, BrushDef brush)
     {
         if (polys.All(poly => poly.Coplanar))
         {
@@ -354,6 +354,7 @@ public class Portaliser
                 splitNode.SplitPlane = poly.Plane;
                 splitNode.LeftChild = new BspNode(splitNode);
                 splitNode.RightChild = new BspNode(splitNode);
+                splitNode.BrushFace = poly.BrushFace;
                 splitNode = splitNode.LeftChild;
             }
 
@@ -385,7 +386,7 @@ public class Portaliser
         }
         else
         {
-            var (left, right) = SplitPolys(node, polys);
+            var (left, right) = SplitInsertionPolys(node, polys);
             if (left.Count > 0 && right.Count > 0)
             {
                 var borderWinding = new Winding(node.SplitPlane, _worldSize);
@@ -394,8 +395,8 @@ public class Portaliser
                     borderWinding.Clip(poly.Plane);
                 }
 
-                left.Add(new BspPoly(node.SplitPlane, borderWinding, coplanar: true));
-                right.Add(new BspPoly(node.SplitPlane.Inverse(), borderWinding, coplanar: true));
+                left.Add(new TreeInsertionPoly(node.SplitPlane, borderWinding, true, (-1, -1)));
+                right.Add(new TreeInsertionPoly(node.SplitPlane.Inverse(), borderWinding, true, (-1, -1)));
             }
 
             InsertBrush(node.LeftChild!, left, brush);
@@ -435,9 +436,34 @@ public class Portaliser
             return resultPolys;
         }
 
-        var boundaryPoly = new BspPoly(node.SplitPlane, boundaryWinding, node.LeftChild, node.RightChild);
-        resultPolys.AddRange(ClipTreePolys(node.RightChild!, ClipTreePolys(node.LeftChild!, [boundaryPoly])));
+        resultPolys.AddRange(ClipTreePolys(node.RightChild!, ClipTreePolys(node.LeftChild!, [
+            new BspPoly(node.SplitPlane, boundaryWinding, node.BrushFace, node.LeftChild, node.RightChild)
+        ])));
         return resultPolys;
+    }
+
+    private (List<TreeInsertionPoly>, List<TreeInsertionPoly>) SplitInsertionPolys(
+        BspNode node,
+        List<TreeInsertionPoly> polys,
+        float epsilon = 0.001f)
+    {
+        var leftPolys = new List<TreeInsertionPoly>();
+        var rightPolys = new List<TreeInsertionPoly>();
+        foreach (var poly in polys)
+        {
+            var (left, right) = poly.Winding.Split(node.SplitPlane, epsilon);
+            if (left.Vertices.Count > 0)
+            {
+                leftPolys.Add(new TreeInsertionPoly(poly.Plane, left, poly.Coplanar, poly.BrushFace));
+            }
+
+            if (right.Vertices.Count > 0)
+            {
+                rightPolys.Add(new TreeInsertionPoly(poly.Plane, right, poly.Coplanar, poly.BrushFace));
+            }
+        }
+
+        return (leftPolys, rightPolys);
     }
 
     private (List<BspPoly>, List<BspPoly>) SplitPolys(BspNode node, List<BspPoly> polys, float epsilon = 0.001f)
@@ -451,15 +477,15 @@ public class Portaliser
             if (left.Vertices.Count > 0)
             {
                 leftPolys.Add(nodeIsLeftSide
-                    ? new BspPoly(poly.Plane, left, node.LeftChild, poly.RightNode, poly.Coplanar)
-                    : new BspPoly(poly.Plane, left, poly.LeftNode, node.LeftChild, poly.Coplanar));
+                    ? new BspPoly(poly.Plane, left, poly.BrushFace, node.LeftChild, poly.RightNode)
+                    : new BspPoly(poly.Plane, left, poly.BrushFace, poly.LeftNode, node.LeftChild));
             }
 
             if (right.Vertices.Count > 0)
             {
                 rightPolys.Add(nodeIsLeftSide
-                    ? new BspPoly(poly.Plane, right, node.RightChild, poly.RightNode, poly.Coplanar)
-                    : new BspPoly(poly.Plane, right, poly.LeftNode, node.RightChild, poly.Coplanar));
+                    ? new BspPoly(poly.Plane, right, poly.BrushFace, node.RightChild, poly.RightNode)
+                    : new BspPoly(poly.Plane, right, poly.BrushFace, poly.LeftNode, node.RightChild));
             }
         }
 
@@ -489,7 +515,7 @@ public class Portaliser
             new(0, 1, 0, _worldSize), // East
             new(0, 0, 1, _worldSize), // Top
             new(0, 0, -1, _worldSize) // Bottom
-        }.Select(p => new BspPoly(p, new Winding(p, _worldSize), root, root)).ToList();
+        }.Select(p => new BspPoly(p, new Winding(p, _worldSize), (-1, -1), root, root)).ToList();
     }
 
 // BUG: This gives flipped faces sometimes?
@@ -528,8 +554,8 @@ public class Portaliser
         targetNodes[1]?.Polys.Add(new BspPoly(
             poly.Plane.Inverse(),
             poly.Winding.Reversed(),
+            poly.BrushFace,
             poly.RightNode,
-            poly.LeftNode,
-            poly.Coplanar));
+            poly.LeftNode));
     }
 }

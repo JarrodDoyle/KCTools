@@ -57,7 +57,9 @@ public static class BrushListBuilder
         for (var i = 0; i < planes.Count; i++)
         {
             // TODO: Texture info
-            faces.Add(new(planes[i], 0, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero));
+            var tx = chunkBrush.Txs[i];
+            var texId = tx.Id > 0 ? tx.Id : chunkBrush.TextureId;
+            faces.Add(new(planes[i], texId, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero));
         }
 
         brush = new BrushDef(chunkBrush.Time, chunkBrush.Media, chunkBrush.Position, chunkBrush.Angle, faces);
