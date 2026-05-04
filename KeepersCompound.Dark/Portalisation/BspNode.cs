@@ -16,7 +16,7 @@ public class BspNode
     public BrushTexInfo TexInfo { get; set; }
     public List<TreeExtractionPoly> Polys { get; } = [];
     public int CellId = -1;
-    internal List<InsertionBrush> ContainedBrushes { get; } = [];
+    internal SortedSet<int> InsertedBrushIds { get; } = [];
 
     public BspNode(BspNode? parent)
     {
@@ -30,45 +30,5 @@ public class BspNode
         action(this);
         LeftChild?.Traverse(action);
         RightChild?.Traverse(action);
-    }
-
-    public int EncodeMedium()
-    {
-        return EncodeMediumInternal(new(Comparer<InsertionBrush>.Create((a, b) => a.Time.CompareTo(b.Time))));
-    }
-
-    private int EncodeMediumInternal(SortedSet<InsertionBrush> active)
-    {
-        var surfaceCount = 0;
-        foreach (var brush in ContainedBrushes)
-        {
-            active.Add(brush);
-        }
-
-        if (Leaf)
-        {
-            Medium = active.Aggregate(CsgMedia.Solid, (m, b) => CsgMediaTable.GetMedium(b.Operation, m));
-        }
-        else
-        {
-            surfaceCount += LeftChild!.EncodeMediumInternal(active);
-            surfaceCount += RightChild!.EncodeMediumInternal(active);
-            if (LeftChild.Medium == RightChild.Medium)
-            {
-                Medium = LeftChild.Medium;
-            }
-            else
-            {
-                if (LeftChild.Medium != CsgMedia.None) surfaceCount++;
-                if (RightChild.Medium != CsgMedia.None) surfaceCount++;
-            }
-        }
-
-        foreach (var brush in ContainedBrushes)
-        {
-            active.Remove(brush);
-        }
-
-        return surfaceCount;
     }
 }

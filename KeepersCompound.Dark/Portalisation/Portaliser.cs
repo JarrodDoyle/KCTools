@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
@@ -20,14 +21,11 @@ public class Portaliser
     public (WorldRep, BspNode) Portalise(List<BrushDef> brushDefs)
     {
         var bspBrushes = BuildBspBrushes(brushDefs);
-        var bspTree = new BspNode(null);
-        foreach (var brush in bspBrushes)
-        {
-            InsertBrush(bspTree, brush.Faces, brush);
-        }
+        var bspTree = BuildBspTree(bspBrushes);
+        var rawLeafs = ComputeBspMediums(bspTree, bspBrushes);
 
         Log.Information("Inserted {N} brushes.", bspBrushes.Count);
-        Log.Information("Leaf count: {l}", bspTree.EncodeMedium());
+        Log.Information("Leaf count: {l}", rawLeafs);
 
         var borderPolys = WorldBorderPolys(bspTree);
         var treePolys = CreateTreePolys(bspTree, borderPolys);
@@ -88,6 +86,188 @@ public class Portaliser
         }
 
         return bspBrushes;
+    }
+
+    private BspNode BuildBspTree(List<InsertionBrush> bspBrushes)
+    {
+        var root = new BspNode(null);
+        var stack = new Stack<(BspNode, List<InsertionBrush>)>();
+        stack.Push((root, bspBrushes));
+        while (stack.TryPop(out var info))
+        {
+            var (node, brushes) = info;
+
+            // If we didn't find a split face that means every face of every remaining brush is already being used as a
+            // split somewhere in the tree and the remaining brushes in out list are fully contained by the current node.
+            // This *should* mean that the current node is a leaf.
+            if (!TryFindSplitFace(brushes, out var splitFace))
+            {
+                if (!node.Leaf)
+                {
+                    Log.Error("Couldn't find split for non-leaf node.");
+                }
+
+                foreach (var brush in brushes)
+                {
+                    node.InsertedBrushIds.Add(brush.Time);
+                }
+
+                continue;
+            }
+
+            splitFace.UsedForSplit = true;
+            node.SplitPlane = splitFace.Plane;
+            node.LeftChild = new BspNode(node);
+            node.RightChild = new BspNode(node);
+            node.TexInfo = splitFace.TexInfo;
+
+            var (leftBrushes, rightBrushes) = SplitBrushList(brushes, splitFace.Plane);
+            stack.Push((node.LeftChild, leftBrushes));
+            stack.Push((node.RightChild, rightBrushes));
+        }
+
+        return root;
+    }
+
+    /// <summary>
+    /// Attempts to select a face to use for splitting the brush list
+    /// </summary>
+    /// <param name="brushes">The brushes to choose a split face from. Also, the list of brushes that will be split by the face.</param>
+    /// <param name="splitFace">The face to be used for splitting.</param>
+    /// <returns>True if a valid splitter is found, false otherwise.</returns>
+    private static bool TryFindSplitFace(
+        List<InsertionBrush> brushes,
+        [NotNullWhen(true)] out TreeInsertionPoly? splitFace)
+    {
+        // TODO: Actually evaluate if this is a good split rather than just picking the first one
+        foreach (var brush in brushes)
+        {
+            foreach (var face in brush.Faces)
+            {
+                if (face.UsedForSplit) continue;
+
+                splitFace = face;
+                return true;
+            }
+        }
+
+        splitFace = null;
+        return false;
+    }
+
+    private (List<InsertionBrush>, List<InsertionBrush>) SplitBrushList(List<InsertionBrush> brushes, Plane splitPlane)
+    {
+        var leftBrushes = new List<InsertionBrush>();
+        var rightBrushes = new List<InsertionBrush>();
+        foreach (var brush in brushes)
+        {
+            var fullCounts = new[] { 0, 0, 0 };
+            foreach (var face in brush.Faces)
+            {
+                var (_, _, counts) = face.Winding.GetSideDetails(splitPlane);
+                fullCounts[0] += counts[0];
+                fullCounts[1] += counts[1];
+                fullCounts[2] += counts[2];
+
+                if (counts[(int)Side.On] == face.Winding.Vertices.Count)
+                {
+                    face.UsedForSplit = true;
+                }
+            }
+
+            if (fullCounts[(int)Side.Back] == 0)
+            {
+                leftBrushes.Add(brush);
+            }
+            else if (fullCounts[(int)Side.Front] == 0)
+            {
+                rightBrushes.Add(brush);
+            }
+            else
+            {
+                var (leftBrush, rightBrush) = SplitBrush(brush, splitPlane);
+                leftBrushes.Add(leftBrush);
+                rightBrushes.Add(rightBrush);
+            }
+        }
+
+        return (leftBrushes, rightBrushes);
+    }
+
+    private (InsertionBrush, InsertionBrush) SplitBrush(InsertionBrush brush, Plane splitPlane)
+    {
+        var leftFaces = new List<TreeInsertionPoly>();
+        var rightFaces = new List<TreeInsertionPoly>();
+        foreach (var face in brush.Faces)
+        {
+            var (leftWinding, rightWinding) = face.Winding.Split(splitPlane);
+            if (leftWinding.Vertices.Count > 0)
+            {
+                leftFaces.Add(new TreeInsertionPoly(face.UsedForSplit, face.Plane, leftWinding, face.TexInfo));
+            }
+
+            if (rightWinding.Vertices.Count > 0)
+            {
+                rightFaces.Add(new TreeInsertionPoly(face.UsedForSplit, face.Plane, rightWinding, face.TexInfo));
+            }
+        }
+
+        if (leftFaces.Count > 0 && rightFaces.Count > 0)
+        {
+            var borderWinding = new Winding(splitPlane, _worldSize);
+            foreach (var face in brush.Faces)
+            {
+                borderWinding.Clip(face.Plane);
+            }
+
+            leftFaces.Add(new TreeInsertionPoly(true, splitPlane, borderWinding, new BrushTexInfo()));
+            rightFaces.Add(new TreeInsertionPoly(true, splitPlane.Inverse(), borderWinding, new BrushTexInfo()));
+        }
+        else
+        {
+            Log.Warning("Splitting brush resulted in an empty side.");
+        }
+
+        return (
+            new InsertionBrush(brush.Time, brush.Operation, leftFaces),
+            new InsertionBrush(brush.Time, brush.Operation, rightFaces));
+    }
+
+    /// <summary>
+    /// Recursively computes the medium at each tree node, merging mediums when both children are the same.
+    /// </summary>
+    /// <param name="node">The current node being computed.</param>
+    /// <param name="bspBrushes">List of all brushes that have been inserted into the tree.</param>
+    /// <returns>The number of virtual leafs after computing and merging mediums</returns>
+    private int ComputeBspMediums(BspNode node, List<InsertionBrush> bspBrushes)
+    {
+        var rawLeafs = 0;
+        if (node.Leaf)
+        {
+            node.Medium = node.InsertedBrushIds.Aggregate(
+                CsgMedia.Solid, (m, t) => CsgMediaTable.GetMedium(bspBrushes[t].Operation, m)
+            );
+        }
+        else if (node is { LeftChild: not null, RightChild: not null })
+        {
+            rawLeafs += ComputeBspMediums(node.LeftChild, bspBrushes);
+            rawLeafs += ComputeBspMediums(node.RightChild, bspBrushes);
+            if (node.LeftChild.Medium == node.RightChild.Medium)
+            {
+                node.Medium = node.LeftChild.Medium;
+            }
+            else
+            {
+                if (node.LeftChild.Medium != CsgMedia.None) rawLeafs++;
+                if (node.RightChild.Medium != CsgMedia.None) rawLeafs++;
+            }
+        }
+        else
+        {
+            Log.Error("Non-leaf node with null child when computing BSP medium.");
+        }
+
+        return rawLeafs;
     }
 
     private List<(Plane, int, int)> SplitComplexCells(List<CellBuilder> cells)
@@ -194,8 +374,10 @@ public class Portaliser
                         borderWinding.Clip(plane);
                     }
 
-                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cell.Medium, cells.Count, new BrushTexInfo());
-                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, cell.Medium, i, new BrushTexInfo());
+                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cell.Medium, cells.Count,
+                        new BrushTexInfo());
+                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, cell.Medium, i,
+                        new BrushTexInfo());
                 }
 
                 addedSplits.Add((splitPlane, i, cells.Count));
@@ -362,72 +544,6 @@ public class Portaliser
         nodes[parentIndex] = node;
     }
 
-    private void InsertBrush(BspNode node, List<TreeInsertionPoly> polys, InsertionBrush brush)
-    {
-        if (polys.All(poly => poly.UsedForSplit))
-        {
-            node.ContainedBrushes.Add(brush);
-            return;
-        }
-
-        if (node.Leaf)
-        {
-            var splitNode = node;
-            foreach (var poly in polys.Where(poly => !poly.UsedForSplit))
-            {
-                splitNode.SplitPlane = poly.Plane;
-                splitNode.LeftChild = new BspNode(splitNode);
-                splitNode.RightChild = new BspNode(splitNode);
-                splitNode.TexInfo = poly.TexInfo;
-                splitNode = splitNode.LeftChild;
-            }
-
-            splitNode.ContainedBrushes.Add(brush);
-            return;
-        }
-
-        var fullCounts = new[] { 0, 0, 0 };
-        foreach (var poly in polys)
-        {
-            var (_, _, counts) = poly.Winding.GetSideDetails(node.SplitPlane);
-            if (counts[(int)Side.On] == poly.Winding.Vertices.Count)
-            {
-                poly.UsedForSplit = true;
-            }
-
-            fullCounts[0] += counts[0];
-            fullCounts[1] += counts[1];
-            fullCounts[2] += counts[2];
-        }
-
-        if (fullCounts[(int)Side.Back] == 0)
-        {
-            InsertBrush(node.LeftChild!, polys, brush);
-        }
-        else if (fullCounts[(int)Side.Front] == 0)
-        {
-            InsertBrush(node.RightChild!, polys, brush);
-        }
-        else
-        {
-            var (left, right) = SplitInsertionPolys(node, polys);
-            if (left.Count > 0 && right.Count > 0)
-            {
-                var borderWinding = new Winding(node.SplitPlane, _worldSize);
-                foreach (var poly in polys)
-                {
-                    borderWinding.Clip(poly.Plane);
-                }
-
-                left.Add(new TreeInsertionPoly(true, node.SplitPlane, borderWinding, new BrushTexInfo()));
-                right.Add(new TreeInsertionPoly(true, node.SplitPlane.Inverse(), borderWinding, new BrushTexInfo()));
-            }
-
-            InsertBrush(node.LeftChild!, left, brush);
-            InsertBrush(node.RightChild!, right, brush);
-        }
-    }
-
     private List<TreeExtractionPoly> CreateTreePolys(BspNode node, List<TreeExtractionPoly> polys)
     {
         if (node.Leaf)
@@ -464,30 +580,6 @@ public class Portaliser
             new TreeExtractionPoly(node.SplitPlane, boundaryWinding, node.TexInfo, node.LeftChild, node.RightChild)
         ])));
         return resultPolys;
-    }
-
-    private (List<TreeInsertionPoly>, List<TreeInsertionPoly>) SplitInsertionPolys(
-        BspNode node,
-        List<TreeInsertionPoly> polys,
-        float epsilon = 0.001f)
-    {
-        var leftPolys = new List<TreeInsertionPoly>();
-        var rightPolys = new List<TreeInsertionPoly>();
-        foreach (var poly in polys)
-        {
-            var (left, right) = poly.Winding.Split(node.SplitPlane, epsilon);
-            if (left.Vertices.Count > 0)
-            {
-                leftPolys.Add(new TreeInsertionPoly(poly.UsedForSplit, poly.Plane, left, poly.TexInfo));
-            }
-
-            if (right.Vertices.Count > 0)
-            {
-                rightPolys.Add(new TreeInsertionPoly(poly.UsedForSplit, poly.Plane, right, poly.TexInfo));
-            }
-        }
-
-        return (leftPolys, rightPolys);
     }
 
     private (List<TreeExtractionPoly>, List<TreeExtractionPoly>) SplitPolys(BspNode node,
