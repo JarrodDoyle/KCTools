@@ -19,13 +19,14 @@ public class Portaliser
 
     public (WorldRep, BspNode) Portalise(List<BrushDef> brushDefs)
     {
+        var bspBrushes = BuildBspBrushes(brushDefs);
         var bspTree = new BspNode(null);
-        foreach (var brush in brushDefs)
+        foreach (var brush in bspBrushes)
         {
-            InsertBrush(bspTree, brush.BuildInsertionPolys(_worldSize), brush);
+            InsertBrush(bspTree, brush.Faces, brush);
         }
 
-        Log.Information("Inserted {N} brushes.", brushDefs.Count);
+        Log.Information("Inserted {N} brushes.", bspBrushes.Count);
         Log.Information("Leaf count: {l}", bspTree.EncodeMedium());
 
         var borderPolys = WorldBorderPolys(bspTree);
@@ -62,6 +63,31 @@ public class Portaliser
         };
         var wr = ConstructWr(wrCells.Count, wrCells, wrTree);
         return (wr, bspTree);
+    }
+
+    private List<InsertionBrush> BuildBspBrushes(List<BrushDef> brushDefs)
+    {
+        var bspBrushes = new List<InsertionBrush>();
+        for (var i = 0; i < brushDefs.Count; i++)
+        {
+            var brush = brushDefs[i];
+            var faces = new List<TreeInsertionPoly>();
+            for (var j = 0; j < brush.Faces.Count; j++)
+            {
+                var winding = new Winding(brush.Faces[j].Plane, _worldSize);
+                for (var k = 0; k < brush.Faces.Count; k++)
+                {
+                    if (k == j) continue;
+                    winding.Clip(brush.Faces[k].Plane);
+                }
+
+                faces.Add(new TreeInsertionPoly(false, brush.Faces[j].Plane, winding, brush.Faces[j].TexInfo));
+            }
+
+            bspBrushes.Add(new InsertionBrush(i, brush.Operation, faces));
+        }
+
+        return bspBrushes;
     }
 
     private List<(Plane, int, int)> SplitComplexCells(List<CellBuilder> cells)
@@ -336,7 +362,7 @@ public class Portaliser
         nodes[parentIndex] = node;
     }
 
-    private void InsertBrush(BspNode node, List<TreeInsertionPoly> polys, BrushDef brush)
+    private void InsertBrush(BspNode node, List<TreeInsertionPoly> polys, InsertionBrush brush)
     {
         if (polys.All(poly => poly.UsedForSplit))
         {

@@ -14,9 +14,9 @@ public class BspNode
     public BspNode? RightChild { get; set; }
 
     public BrushTexInfo TexInfo { get; set; }
-    public List<BrushDef> ContainedBrushes { get; } = [];
     public List<TreeExtractionPoly> Polys { get; } = [];
     public int CellId = -1;
+    internal List<InsertionBrush> ContainedBrushes { get; } = [];
 
     public BspNode(BspNode? parent)
     {
@@ -34,10 +34,10 @@ public class BspNode
 
     public int EncodeMedium()
     {
-        return EncodeMediumInternal(new(Comparer<BrushDef>.Create((a, b) => a.Time.CompareTo(b.Time))));
+        return EncodeMediumInternal(new(Comparer<InsertionBrush>.Create((a, b) => a.Time.CompareTo(b.Time))));
     }
 
-    private int EncodeMediumInternal(SortedSet<BrushDef> active)
+    private int EncodeMediumInternal(SortedSet<InsertionBrush> active)
     {
         var surfaceCount = 0;
         foreach (var brush in ContainedBrushes)

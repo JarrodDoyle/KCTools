@@ -18,14 +18,14 @@ public class BrushDefExtractor
     {
         foreach (var brush in brushes)
         {
-            if (brush.Media <= Media.Blockable && TryBuildBrush(BrushDefs.Count, brush, out var brushDef))
+            if (brush.Media <= Media.Blockable && TryBuildBrush(brush, out var brushDef))
             {
                 BrushDefs.Add(brushDef);
             }
         }
     }
 
-    private static bool TryBuildBrush(int time, BrList.Brush brush, [NotNullWhen(true)] out BrushDef? brushDef)
+    private static bool TryBuildBrush(BrList.Brush brush, [NotNullWhen(true)] out BrushDef? brushDef)
     {
         var shape = GetShape(brush);
         var planes = shape.Primitive switch
@@ -63,7 +63,7 @@ public class BrushDefExtractor
             faces.Add(new BrushDefFace(plane, texInfo));
         }
 
-        brushDef = new BrushDef(time, (BrushOperation)brush.Media, faces);
+        brushDef = new BrushDef((BrushOperation)brush.Media, faces);
         return true;
     }
 
