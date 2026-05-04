@@ -27,21 +27,17 @@ public class Portaliser
         var initialCellCount = cellBuilders.Count;
         var extractionPolys = BuildExtractionPolys(bspTree, WorldBorderExtractionPolys(bspTree));
         ApplyExtractionPolys(cellBuilders, extractionPolys);
-
-        var bspPlanes = new List<Plane>();
-        var wrTreeNodes = new List<WorldRep.BspTree.Node>();
-        ConstructWrTreeNodes(bspPlanes, bspTree, wrTreeNodes, 0x00FFFFFF, -1);
-
         var newSplits = SplitComplexCells(cellBuilders);
         var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell()).ToList();
-        ApplyAddedSplits(newSplits, bspPlanes, wrTreeNodes);
-        var wrTree = new WorldRep.BspTree
+
+        var wrTreeBuilder = new WrTreeBuilder();
+        wrTreeBuilder.AddCsgTree(bspTree);
+        foreach (var (plane, from, to) in newSplits)
         {
-            PlaneCount = (uint)bspPlanes.Count,
-            NodeCount = (uint)wrTreeNodes.Count,
-            Planes = bspPlanes.ToArray(),
-            Nodes = wrTreeNodes.ToArray()
-        };
+            wrTreeBuilder.AddSplit(plane, from, to);
+        }
+
+        var wrTree = wrTreeBuilder.ToWrTree();
         var wr = ConstructWr(wrCells.Count, wrCells, wrTree);
 
         Log.Information("Inserted {N} brushes.", bspBrushes.Count);
@@ -377,51 +373,6 @@ public class Portaliser
         return addedSplits;
     }
 
-    private static void ApplyAddedSplits(
-        List<(Plane, int, int)> addedSplits,
-        List<Plane> bspPlanes,
-        List<WorldRep.BspTree.Node> wrTreeNodes)
-    {
-        foreach (var (plane, from, to) in addedSplits)
-        {
-            var nodeCount = wrTreeNodes.Count;
-            for (var i = 0; i < nodeCount; i++)
-            {
-                var node = wrTreeNodes[i];
-                var flags = (node.ParentIndex >> 24) & 0xFF;
-                if ((flags & 0x01) == 0 || node.InsideIndex != from)
-                {
-                    continue;
-                }
-
-                // TODO: How to check if needs reverse flag?
-                node.ParentIndex ^= 0x01 << 24;
-                node.PlaneId = bspPlanes.Count;
-                node.InsideIndex = nodeCount;
-                node.OutsideIndex = nodeCount + 1;
-                bspPlanes.Add(plane);
-                wrTreeNodes.Add(new WorldRep.BspTree.Node
-                {
-                    ParentIndex = i | 0x01 << 24,
-                    CellId = -1,
-                    PlaneId = -1,
-                    InsideIndex = from,
-                    OutsideIndex = 0,
-                });
-                wrTreeNodes.Add(new WorldRep.BspTree.Node
-                {
-                    ParentIndex = i | 0x01 << 24,
-                    CellId = -1,
-                    PlaneId = -1,
-                    InsideIndex = to,
-                    OutsideIndex = 0,
-                });
-                wrTreeNodes[i] = node;
-                break;
-            }
-        }
-    }
-
     private WorldRep ConstructWr(int cellCount, List<WorldRep.Cell> cells, WorldRep.BspTree tree)
     {
         using var stream = new MemoryStream();
@@ -485,60 +436,6 @@ public class Portaliser
         }
 
         return cellBuilders;
-    }
-
-// TODO: Use cell based planes rather than spaffing global plane indices
-    private void ConstructWrTreeNodes(
-        List<Plane> bspPlanes,
-        BspNode tree,
-        List<WorldRep.BspTree.Node> nodes,
-        int parentIndex,
-        int cellId)
-    {
-        // According to vfig (see vfig/misdeed) Marked flag (0x2) gets cleared on load so I can just ignore it
-        var node = new WorldRep.BspTree.Node
-        {
-            ParentIndex = parentIndex,
-            CellId = -1,
-            PlaneId = -1,
-            InsideIndex = 0x00FFFFFF,
-            OutsideIndex = 0x00FFFFFF,
-        };
-
-        cellId = tree.CellId == -1 ? cellId : tree.CellId;
-        if (tree.Leaf || tree.CellId != -1)
-        {
-            node.ParentIndex |= 0x01 << 24;
-            node.InsideIndex = cellId;
-            node.OutsideIndex = 0; // DromEd writes garbage here. It's just padding and means nothing
-            nodes.Add(node);
-            return;
-        }
-
-        node.PlaneId = bspPlanes.Count;
-        bspPlanes.Add(tree.SplitPlane);
-        nodes.Add(node);
-        parentIndex = nodes.Count - 1;
-        if (tree.LeftChild != null && tree.LeftChild.Medium != CsgMedia.Solid)
-        {
-            node.InsideIndex = nodes.Count;
-            ConstructWrTreeNodes(bspPlanes, tree.LeftChild, nodes, parentIndex, cellId);
-        }
-
-        if (tree.RightChild != null && tree.RightChild.Medium != CsgMedia.Solid)
-        {
-            node.OutsideIndex = nodes.Count;
-            ConstructWrTreeNodes(bspPlanes, tree.RightChild, nodes, parentIndex, cellId);
-        }
-
-        if (node.OutsideIndex != 0x00FFFFFF && node.InsideIndex == 0x00FFFFFF)
-        {
-            node.InsideIndex = node.OutsideIndex;
-            node.OutsideIndex = 0x00FFFFFF;
-            node.ParentIndex |= 0x4 << 24;
-        }
-
-        nodes[parentIndex] = node;
     }
 
     private List<TreeExtractionPoly> BuildExtractionPolys(BspNode node, List<TreeExtractionPoly> polys)
