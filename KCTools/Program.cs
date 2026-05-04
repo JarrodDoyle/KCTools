@@ -6,6 +6,7 @@ using KeepersCompound.Dark;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Portalisation;
+using KeepersCompound.Dark.Portalisation.Brush.Extractor;
 using KeepersCompound.Dark.Resources;
 using KeepersCompound.Formats.Images;
 using KeepersCompound.Formats.Model;
@@ -136,8 +137,12 @@ public class RootCommand
                     return ExitCode.Error;
                 }
 
+                var extractor = new BrushDefExtractor();
+                extractor.AddBrushList(brList.Brushes);
+                // TODO: - Insert blockable brushes
+                var brushDefs = extractor.BrushDefs;
                 var portaliser = new Portaliser(1000f);
-                var (wr, tree) = Timing.TimeStage("Portalise", () => portaliser.Portalise(brList));
+                var (wr, tree) = Timing.TimeStage("Portalise", () => portaliser.Portalise(brushDefs));
                 mission.Chunks[wr.Header.Name] = wr;
                 var mesh = Timing.TimeStage("Generate GLB", () => GenerateMesh(tree, false));
                 Log.Information("Saving mesh: {Path}", meshPath);

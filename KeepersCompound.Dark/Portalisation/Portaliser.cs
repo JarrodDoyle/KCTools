@@ -3,7 +3,6 @@ using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Portalisation.Brush;
 using KeepersCompound.Dark.Maths;
-using KeepersCompound.Dark.Portalisation.Brush.Extractor;
 using Serilog;
 using Version = KeepersCompound.Dark.Database.Version;
 
@@ -18,13 +17,8 @@ public class Portaliser
         _worldSize = worldSize;
     }
 
-    public (WorldRep, BspNode) Portalise(BrList brushList)
+    public (WorldRep, BspNode) Portalise(List<BrushDef> brushDefs)
     {
-        var extractor = new BrushDefExtractor();
-        extractor.AddBrushList(brushList.Brushes);
-        var brushDefs = extractor.BrushDefs;
-        // TODO: - Insert blockable brushes
-
         var bspTree = new BspNode(null);
         foreach (var brush in brushDefs)
         {
