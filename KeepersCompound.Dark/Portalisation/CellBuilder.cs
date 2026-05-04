@@ -14,7 +14,7 @@ public class CellBuilder
         public required CsgMedia LeftMedia;
         public required CsgMedia RightMedia;
         public required int Destination;
-        public required (int, int) BrushFace;
+        public required BrushTexInfo TexInfo;
     }
 
     public bool NeedsSplit => Vertices.Count > 128 || Surfaces.Count > 64;
@@ -32,7 +32,7 @@ public class CellBuilder
     {
         Medium = node.Medium;
 
-        var mergedPolys = new List<BspPoly>();
+        var mergedPolys = new List<TreeExtractionPoly>();
         foreach (var poly in node.Polys)
         {
             MergeOrInsert(mergedPolys, poly);
@@ -47,13 +47,13 @@ public class CellBuilder
                 LeftMedia = poly.LeftNode?.Medium ?? CsgMedia.None,
                 RightMedia = poly.RightNode?.Medium ?? CsgMedia.None,
                 Destination = poly.RightNode?.CellId ?? -1,
-                BrushFace = poly.BrushFace,
+                TexInfo = poly.TexInfo,
             });
         }
     }
 
     public void AddPoly(Plane plane, Winding winding, CsgMedia leftMedia, CsgMedia rightMedia, int destination,
-        (int, int) face)
+        BrushTexInfo texInfo)
     {
         Surfaces.Add(new Surface
         {
@@ -62,11 +62,11 @@ public class CellBuilder
             LeftMedia = leftMedia,
             RightMedia = rightMedia,
             Destination = destination,
-            BrushFace = face,
+            TexInfo = texInfo,
         });
     }
 
-    public WorldRep.Cell ToCell(List<BrushDef> brushes)
+    public WorldRep.Cell ToCell()
     {
         var vertices = new List<Vector3>();
         var planes = new List<Plane>();
@@ -79,7 +79,7 @@ public class CellBuilder
 
         foreach (var surface in processOrder.Select(idx => Surfaces[idx]))
         {
-            ProcessSurface(brushes, surface, vertices, planes, indices, polys, renderPolys, lmInfos, lms);
+            ProcessSurface(surface, vertices, planes, indices, polys, renderPolys, lmInfos, lms);
         }
 
         return new WorldRep.Cell(
@@ -132,7 +132,6 @@ public class CellBuilder
     }
 
     private void ProcessSurface(
-        List<BrushDef> brushes,
         Surface surface,
         List<Vector3> vertices,
         List<Plane> planes,
@@ -153,13 +152,9 @@ public class CellBuilder
             _ => (0, 0, 0)
         };
 
-        var brushIndex = surface.BrushFace.Item1;
-        var faceIndex = surface.BrushFace.Item2;
-        if (texId == 0 &&
-            brushIndex >= 0 && brushIndex < brushes.Count &&
-            faceIndex >= 0 && faceIndex < brushes[brushIndex].Faces.Count)
+        if (texId == 0)
         {
-            texId = (int)brushes[brushIndex].Faces[faceIndex].TexInfo.TextureId;
+            texId = (int)surface.TexInfo.TextureId;
         }
 
         indices.AddRange(vs.Select(v => (byte)AddMergedVertex(vertices, v)));
@@ -202,7 +197,7 @@ public class CellBuilder
         });
     }
 
-    private static void MergeOrInsert(List<BspPoly> polys, BspPoly newPoly)
+    private static void MergeOrInsert(List<TreeExtractionPoly> polys, TreeExtractionPoly newPoly)
     {
         for (var idx = 0; idx < polys.Count; idx++)
         {
@@ -308,7 +303,7 @@ public class CellBuilder
         return (-1, -1);
     }
 
-    private static Side NextVertexSide(BspPoly p1, BspPoly p2, int i, int j)
+    private static Side NextVertexSide(TreeExtractionPoly p1, TreeExtractionPoly p2, int i, int j)
     {
         const float epsilon = 0.0001f;
         var v1 = p1.Winding.Vertices[i];

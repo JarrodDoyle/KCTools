@@ -13,15 +13,16 @@ public class BspNode
     public BspNode? LeftChild { get; set; }
     public BspNode? RightChild { get; set; }
 
-    public (int, int) BrushFace { get; set; } = (-1, -1);
+    public BrushTexInfo TexInfo { get; set; }
     public List<BrushDef> ContainedBrushes { get; } = [];
-    public List<BspPoly> Polys { get; } = [];
+    public List<TreeExtractionPoly> Polys { get; } = [];
     public int CellId = -1;
 
     public BspNode(BspNode? parent)
     {
         Parent = parent;
         Medium = CsgMedia.None;
+        TexInfo = new BrushTexInfo();
     }
 
     public void Traverse(Action<BspNode> action)

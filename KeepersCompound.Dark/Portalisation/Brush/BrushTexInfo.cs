@@ -12,6 +12,10 @@ public class BrushTexInfo
     public float Rotation { get; }
     public Vector2 Offset { get; }
 
+    public BrushTexInfo()
+    {
+    }
+
     public BrushTexInfo(
         uint textureId,
         Vector3 uProjection,

@@ -1,0 +1,23 @@
+using System.Numerics;
+using KeepersCompound.Dark.Maths;
+using KeepersCompound.Dark.Portalisation.Brush;
+
+namespace KeepersCompound.Dark.Portalisation;
+
+public class TreeExtractionPoly
+{
+    public Plane Plane { get; }
+    public Winding Winding { get; }
+    public BrushTexInfo TexInfo { get; }
+    public BspNode? LeftNode { get; }
+    public BspNode? RightNode { get; }
+
+    public TreeExtractionPoly(Plane plane, Winding winding, BrushTexInfo texInfo, BspNode? leftNode, BspNode? rightNode)
+    {
+        Plane = plane;
+        Winding = winding;
+        TexInfo = texInfo;
+        LeftNode = leftNode;
+        RightNode = rightNode;
+    }
+}

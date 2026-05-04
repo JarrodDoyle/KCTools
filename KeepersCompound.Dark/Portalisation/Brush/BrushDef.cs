@@ -28,7 +28,7 @@ public class BrushDef
                 winding.Clip(Faces[j].Plane);
             }
 
-            polys.Add(new TreeInsertionPoly(Faces[i].Plane, winding, false, (Time, i)));
+            polys.Add(new TreeInsertionPoly(false, Faces[i].Plane, winding, Faces[i].TexInfo));
         }
 
         return polys;

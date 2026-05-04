@@ -57,7 +57,7 @@ public class Portaliser
             }
         });
         var newSplits = SplitComplexCells(cellBuilders);
-        var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell(brushDefs)).ToList();
+        var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell()).ToList();
         ApplyAddedSplits(newSplits, bspPlanes, wrTreeNodes);
         var wrTree = new WorldRep.BspTree
         {
@@ -124,13 +124,13 @@ public class Portaliser
                     if (leftWinding.Vertices.Count > 0)
                     {
                         leftCell.AddPoly(plane, leftWinding, surface.LeftMedia, surface.RightMedia,
-                            surface.Destination, surface.BrushFace);
+                            surface.Destination, surface.TexInfo);
                     }
 
                     if (rightWinding.Vertices.Count > 0)
                     {
                         rightCell.AddPoly(plane, rightWinding, surface.LeftMedia, surface.RightMedia,
-                            surface.Destination, surface.BrushFace);
+                            surface.Destination, surface.TexInfo);
                     }
 
                     if (rightWinding.Vertices.Count == 0 || surface.Destination == -1)
@@ -157,9 +157,10 @@ public class Portaliser
 
                         var destPlane = destCell.Planes[destSurface.PlaneId];
                         var (destWindingLeft, destWindingRight) = destWinding.Split(splitPlane);
-                        destCell.AddPoly(destPlane, destWindingLeft, destSurface.LeftMedia, destSurface.RightMedia, i, destSurface.BrushFace);
+                        destCell.AddPoly(destPlane, destWindingLeft, destSurface.LeftMedia, destSurface.RightMedia, i,
+                            destSurface.TexInfo);
                         destCell.AddPoly(destPlane, destWindingRight, destSurface.LeftMedia, destSurface.RightMedia,
-                            cells.Count, destSurface.BrushFace); // new cell id
+                            cells.Count, destSurface.TexInfo); // new cell id
                         break;
                     }
                 }
@@ -173,8 +174,8 @@ public class Portaliser
                         borderWinding.Clip(plane);
                     }
 
-                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cell.Medium, cells.Count, (-1, -1));
-                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, cell.Medium, i, (-1, -1));
+                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cell.Medium, cells.Count, new BrushTexInfo());
+                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, cell.Medium, i, new BrushTexInfo());
                 }
 
                 addedSplits.Add((splitPlane, i, cells.Count));
@@ -343,7 +344,7 @@ public class Portaliser
 
     private void InsertBrush(BspNode node, List<TreeInsertionPoly> polys, BrushDef brush)
     {
-        if (polys.All(poly => poly.Coplanar))
+        if (polys.All(poly => poly.UsedForSplit))
         {
             node.ContainedBrushes.Add(brush);
             return;
@@ -352,12 +353,12 @@ public class Portaliser
         if (node.Leaf)
         {
             var splitNode = node;
-            foreach (var poly in polys.Where(poly => !poly.Coplanar))
+            foreach (var poly in polys.Where(poly => !poly.UsedForSplit))
             {
                 splitNode.SplitPlane = poly.Plane;
                 splitNode.LeftChild = new BspNode(splitNode);
                 splitNode.RightChild = new BspNode(splitNode);
-                splitNode.BrushFace = poly.BrushFace;
+                splitNode.TexInfo = poly.TexInfo;
                 splitNode = splitNode.LeftChild;
             }
 
@@ -371,7 +372,7 @@ public class Portaliser
             var (_, _, counts) = poly.Winding.GetSideDetails(node.SplitPlane);
             if (counts[(int)Side.On] == poly.Winding.Vertices.Count)
             {
-                poly.Coplanar = true;
+                poly.UsedForSplit = true;
             }
 
             fullCounts[0] += counts[0];
@@ -398,8 +399,8 @@ public class Portaliser
                     borderWinding.Clip(poly.Plane);
                 }
 
-                left.Add(new TreeInsertionPoly(node.SplitPlane, borderWinding, true, (-1, -1)));
-                right.Add(new TreeInsertionPoly(node.SplitPlane.Inverse(), borderWinding, true, (-1, -1)));
+                left.Add(new TreeInsertionPoly(true, node.SplitPlane, borderWinding, new BrushTexInfo()));
+                right.Add(new TreeInsertionPoly(true, node.SplitPlane.Inverse(), borderWinding, new BrushTexInfo()));
             }
 
             InsertBrush(node.LeftChild!, left, brush);
@@ -407,7 +408,7 @@ public class Portaliser
         }
     }
 
-    private List<BspPoly> CreateTreePolys(BspNode node, List<BspPoly> polys)
+    private List<TreeExtractionPoly> CreateTreePolys(BspNode node, List<TreeExtractionPoly> polys)
     {
         if (node.Leaf)
         {
@@ -430,7 +431,7 @@ public class Portaliser
         }
 
         var (leftPolys, rightPolys) = SplitPolys(node, polys);
-        var resultPolys = new List<BspPoly>();
+        var resultPolys = new List<TreeExtractionPoly>();
         resultPolys.AddRange(CreateTreePolys(node.LeftChild!, leftPolys));
         resultPolys.AddRange(CreateTreePolys(node.RightChild!, rightPolys));
 
@@ -440,7 +441,7 @@ public class Portaliser
         }
 
         resultPolys.AddRange(ClipTreePolys(node.RightChild!, ClipTreePolys(node.LeftChild!, [
-            new BspPoly(node.SplitPlane, boundaryWinding, node.BrushFace, node.LeftChild, node.RightChild)
+            new TreeExtractionPoly(node.SplitPlane, boundaryWinding, node.TexInfo, node.LeftChild, node.RightChild)
         ])));
         return resultPolys;
     }
@@ -457,22 +458,23 @@ public class Portaliser
             var (left, right) = poly.Winding.Split(node.SplitPlane, epsilon);
             if (left.Vertices.Count > 0)
             {
-                leftPolys.Add(new TreeInsertionPoly(poly.Plane, left, poly.Coplanar, poly.BrushFace));
+                leftPolys.Add(new TreeInsertionPoly(poly.UsedForSplit, poly.Plane, left, poly.TexInfo));
             }
 
             if (right.Vertices.Count > 0)
             {
-                rightPolys.Add(new TreeInsertionPoly(poly.Plane, right, poly.Coplanar, poly.BrushFace));
+                rightPolys.Add(new TreeInsertionPoly(poly.UsedForSplit, poly.Plane, right, poly.TexInfo));
             }
         }
 
         return (leftPolys, rightPolys);
     }
 
-    private (List<BspPoly>, List<BspPoly>) SplitPolys(BspNode node, List<BspPoly> polys, float epsilon = 0.001f)
+    private (List<TreeExtractionPoly>, List<TreeExtractionPoly>) SplitPolys(BspNode node,
+        List<TreeExtractionPoly> polys, float epsilon = 0.001f)
     {
-        var leftPolys = new List<BspPoly>();
-        var rightPolys = new List<BspPoly>();
+        var leftPolys = new List<TreeExtractionPoly>();
+        var rightPolys = new List<TreeExtractionPoly>();
         foreach (var poly in polys)
         {
             var nodeIsLeftSide = poly.LeftNode == node;
@@ -480,22 +482,22 @@ public class Portaliser
             if (left.Vertices.Count > 0)
             {
                 leftPolys.Add(nodeIsLeftSide
-                    ? new BspPoly(poly.Plane, left, poly.BrushFace, node.LeftChild, poly.RightNode)
-                    : new BspPoly(poly.Plane, left, poly.BrushFace, poly.LeftNode, node.LeftChild));
+                    ? new TreeExtractionPoly(poly.Plane, left, poly.TexInfo, node.LeftChild, poly.RightNode)
+                    : new TreeExtractionPoly(poly.Plane, left, poly.TexInfo, poly.LeftNode, node.LeftChild));
             }
 
             if (right.Vertices.Count > 0)
             {
                 rightPolys.Add(nodeIsLeftSide
-                    ? new BspPoly(poly.Plane, right, poly.BrushFace, node.RightChild, poly.RightNode)
-                    : new BspPoly(poly.Plane, right, poly.BrushFace, poly.LeftNode, node.RightChild));
+                    ? new TreeExtractionPoly(poly.Plane, right, poly.TexInfo, node.RightChild, poly.RightNode)
+                    : new TreeExtractionPoly(poly.Plane, right, poly.TexInfo, poly.LeftNode, node.RightChild));
             }
         }
 
         return (leftPolys, rightPolys);
     }
 
-    private List<BspPoly> ClipTreePolys(BspNode node, List<BspPoly> polys)
+    private List<TreeExtractionPoly> ClipTreePolys(BspNode node, List<TreeExtractionPoly> polys)
     {
         if (polys.Count == 0 || node.Leaf)
         {
@@ -508,7 +510,7 @@ public class Portaliser
         return result;
     }
 
-    private List<BspPoly> WorldBorderPolys(BspNode root)
+    private List<TreeExtractionPoly> WorldBorderPolys(BspNode root)
     {
         return new Plane[]
         {
@@ -518,11 +520,11 @@ public class Portaliser
             new(0, 1, 0, _worldSize), // East
             new(0, 0, 1, _worldSize), // Top
             new(0, 0, -1, _worldSize) // Bottom
-        }.Select(p => new BspPoly(p, new Winding(p, _worldSize), (-1, -1), root, root)).ToList();
+        }.Select(p => new TreeExtractionPoly(p, new Winding(p, _worldSize), new BrushTexInfo(), root, root)).ToList();
     }
 
 // BUG: This gives flipped faces sometimes?
-    private void InsertBspGeo(BspPoly poly)
+    private void InsertBspGeo(TreeExtractionPoly poly)
     {
         if (poly.LeftNode == null || poly.RightNode == null)
         {
@@ -554,10 +556,10 @@ public class Portaliser
         }
 
         targetNodes[0]?.Polys.Add(poly);
-        targetNodes[1]?.Polys.Add(new BspPoly(
+        targetNodes[1]?.Polys.Add(new TreeExtractionPoly(
             poly.Plane.Inverse(),
             poly.Winding.Reversed(),
-            poly.BrushFace,
+            poly.TexInfo,
             poly.RightNode,
             poly.LeftNode));
     }
