@@ -3,66 +3,67 @@ using System.Numerics;
 using KeepersCompound.Dark.Database.Chunks;
 using Serilog;
 
-namespace KeepersCompound.Dark.Portalisation.Brush;
+namespace KeepersCompound.Dark.Portalisation.Brush.Extractor;
 
-public static class BrushListBuilder
+public class BrushDefExtractor
 {
-    private enum PrimitiveType
+    public List<BrushDef> BrushDefs { get; }
+
+    public BrushDefExtractor()
     {
-        Cube,
-        Cylinder,
-        Pyramid,
-        CornerPyramid,
-        Wedge,
-        Dodecahedron,
+        BrushDefs = [];
     }
 
-    private record BrushShape(PrimitiveType Primitive, int SideCount, bool SideAligned);
-
-    public static List<BrushDef> FromChunk(BrList chunk)
+    public void AddBrushList(List<BrList.Brush> brushes)
     {
-        var brushes = new List<BrushDef>();
-        foreach (var chunkBrush in chunk.Brushes)
+        foreach (var brush in brushes)
         {
-            if (chunkBrush.Media <= Media.Blockable && TryBuildBrush(chunkBrush, out var brush))
+            if (brush.Media <= Media.Blockable && TryBuildBrush(BrushDefs.Count, brush, out var brushDef))
             {
-                brushes.Add(brush);
+                BrushDefs.Add(brushDef);
             }
         }
-
-        return brushes;
     }
 
-    private static bool TryBuildBrush(BrList.Brush chunkBrush, [NotNullWhen(true)] out BrushDef? brush)
+    private static bool TryBuildBrush(int time, BrList.Brush brush, [NotNullWhen(true)] out BrushDef? brushDef)
     {
-        var shape = GetShape(chunkBrush);
+        var shape = GetShape(brush);
         var planes = shape.Primitive switch
         {
-            PrimitiveType.Cube => GetCubePlanes(chunkBrush.Size),
-            PrimitiveType.Wedge => GetWedgePlanes(chunkBrush.Size),
-            PrimitiveType.Cylinder => GetCylinderPlanes(chunkBrush.Size, shape.SideCount, shape.SideAligned),
-            PrimitiveType.Pyramid => GetPyramidPlanes(chunkBrush.Size, shape.SideCount, false, shape.SideAligned),
-            PrimitiveType.CornerPyramid => GetPyramidPlanes(chunkBrush.Size, shape.SideCount, true, shape.SideAligned),
+            PrimitiveType.Cube => GetCubePlanes(brush.Size),
+            PrimitiveType.Wedge => GetWedgePlanes(brush.Size),
+            PrimitiveType.Cylinder => GetCylinderPlanes(brush.Size, shape.SideCount, shape.SideAligned),
+            PrimitiveType.Pyramid => GetPyramidPlanes(brush.Size, shape.SideCount, false, shape.SideAligned),
+            PrimitiveType.CornerPyramid => GetPyramidPlanes(brush.Size, shape.SideCount, true, shape.SideAligned),
             _ => [],
         };
 
-        if (planes.Count != chunkBrush.Txs.Length)
+        if (planes.Count != brush.Txs.Length)
         {
-            Log.Information("Unhandled brush: {Id}, {P}", chunkBrush.Id, shape.Primitive);
-            brush = null;
+            Log.Information("Unhandled brush: {Id}, {P}", brush.Id, shape.Primitive);
+            brushDef = null;
             return false;
         }
+
+        var translation = Matrix4x4.CreateTranslation(brush.Position);
+        var rotation = Matrix4x4.Identity;
+        rotation *= Matrix4x4.CreateRotationX(float.DegreesToRadians(brush.Angle.X));
+        rotation *= Matrix4x4.CreateRotationY(float.DegreesToRadians(brush.Angle.Y));
+        rotation *= Matrix4x4.CreateRotationZ(float.DegreesToRadians(brush.Angle.Z));
+        var transform = rotation * translation;
 
         var faces = new List<BrushDefFace>(planes.Count);
         for (var i = 0; i < planes.Count; i++)
         {
-            // TODO: Texture info
-            var tx = chunkBrush.Txs[i];
-            var texId = tx.Id > 0 ? tx.Id : chunkBrush.TextureId;
-            faces.Add(new(planes[i], texId, Vector3.One, Vector3.One, 1, 1, 0, Vector2.Zero));
+            var plane = Plane.Transform(Plane.Normalize(planes[i]), transform);
+            var uProjection = Vector3.Transform(Vector3.UnitX, rotation);
+            var vProjection = Vector3.Transform(Vector3.UnitY, rotation);
+            var texId = brush.Txs[i].Id > 0 ? brush.Txs[i].Id : brush.TextureId;
+            var texInfo = new BrushTexInfo((uint)texId, uProjection, vProjection, 1, 1, 0, Vector2.Zero);
+            faces.Add(new BrushDefFace(plane, texInfo));
         }
 
-        brush = new BrushDef(chunkBrush.Time, chunkBrush.Media, chunkBrush.Position, chunkBrush.Angle, faces);
+        brushDef = new BrushDef(time, brush.Media, faces);
         return true;
     }
 

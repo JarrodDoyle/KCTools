@@ -159,7 +159,7 @@ public class CellBuilder
             brushIndex >= 0 && brushIndex < brushes.Count &&
             faceIndex >= 0 && faceIndex < brushes[brushIndex].Faces.Count)
         {
-            texId = brushes[brushIndex].Faces[faceIndex].TextureId;
+            texId = (int)brushes[brushIndex].Faces[faceIndex].TexInfo.TextureId;
         }
 
         indices.AddRange(vs.Select(v => (byte)AddMergedVertex(vertices, v)));
