@@ -27,16 +27,11 @@ public class Portaliser
         var initialCellCount = cellBuilders.Count;
         var extractionPolys = BuildExtractionPolys(bspTree, WorldBorderExtractionPolys(bspTree));
         ApplyExtractionPolys(cellBuilders, extractionPolys);
-        var newSplits = SplitComplexCells(cellBuilders);
-        var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell()).ToList();
-
         var wrTreeBuilder = new WrTreeBuilder();
         wrTreeBuilder.AddCsgTree(bspTree);
-        foreach (var (plane, from, to) in newSplits)
-        {
-            wrTreeBuilder.AddSplit(plane, from, to);
-        }
+        SplitComplexCells(cellBuilders, wrTreeBuilder);
 
+        var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell()).ToList();
         var wrTree = wrTreeBuilder.ToWrTree();
         var wr = ConstructWr(wrCells.Count, wrCells, wrTree);
 
@@ -254,9 +249,8 @@ public class Portaliser
         return rawLeafs;
     }
 
-    private List<(Plane, int, int)> SplitComplexCells(List<CellBuilder> cells)
+    private void SplitComplexCells(List<CellBuilder> cells, WrTreeBuilder wrTreeBuilder)
     {
-        var addedSplits = new List<(Plane, int, int)>(); // TODO Need more info for where to insert
         var splitOccurred = true;
         while (splitOccurred)
         {
@@ -364,13 +358,11 @@ public class Portaliser
                         new BrushTexInfo());
                 }
 
-                addedSplits.Add((splitPlane, i, cells.Count));
+                wrTreeBuilder.AddSplit(splitPlane, i, cells.Count);
                 cells[i] = leftCell;
                 cells.Add(rightCell);
             }
         }
-
-        return addedSplits;
     }
 
     private WorldRep ConstructWr(int cellCount, List<WorldRep.Cell> cells, WorldRep.BspTree tree)
