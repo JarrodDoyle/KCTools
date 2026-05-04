@@ -24,12 +24,9 @@ public class Portaliser
         var bspTree = BuildBspTree(bspBrushes);
         var rawLeafs = ComputeBspMediums(bspTree, bspBrushes);
         var cellBuilders = AssignCells(bspTree);
+        var initialCellCount = cellBuilders.Count;
         var extractionPolys = BuildExtractionPolys(bspTree, WorldBorderExtractionPolys(bspTree));
         ApplyExtractionPolys(cellBuilders, extractionPolys);
-
-        Log.Information("Initial cell count: {CellCount}", cellBuilders.Count);
-        Log.Information("Inserted {N} brushes.", bspBrushes.Count);
-        Log.Information("Leaf count: {l}", rawLeafs);
 
         var bspPlanes = new List<Plane>();
         var wrTreeNodes = new List<WorldRep.BspTree.Node>();
@@ -46,6 +43,11 @@ public class Portaliser
             Nodes = wrTreeNodes.ToArray()
         };
         var wr = ConstructWr(wrCells.Count, wrCells, wrTree);
+
+        Log.Information("Inserted {N} brushes.", bspBrushes.Count);
+        Log.Information("Leaf count: {l}", rawLeafs);
+        Log.Information("Initial cell count: {CellCount}", initialCellCount);
+        Log.Information("Final cell count: {CellCount}", wrCells.Count);
         return (wr, bspTree);
     }
 
