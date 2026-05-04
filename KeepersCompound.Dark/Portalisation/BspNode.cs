@@ -14,7 +14,6 @@ public class BspNode
     public BspNode? RightChild { get; set; }
 
     public BrushTexInfo TexInfo { get; set; }
-    public List<TreeExtractionPoly> Polys { get; } = [];
     public int CellId = -1;
     internal SortedSet<int> InsertedBrushIds { get; } = [];
 

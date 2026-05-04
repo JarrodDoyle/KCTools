@@ -20,4 +20,9 @@ public class TreeExtractionPoly
         LeftNode = leftNode;
         RightNode = rightNode;
     }
+
+    public TreeExtractionPoly Reversed()
+    {
+        return new TreeExtractionPoly(Plane.Inverse(), Winding.Reversed(), TexInfo, RightNode, LeftNode);
+    }
 }

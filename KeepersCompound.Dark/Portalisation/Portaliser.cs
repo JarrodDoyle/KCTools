@@ -23,32 +23,18 @@ public class Portaliser
         var bspBrushes = BuildBspBrushes(brushDefs);
         var bspTree = BuildBspTree(bspBrushes);
         var rawLeafs = ComputeBspMediums(bspTree, bspBrushes);
+        var cellBuilders = AssignCells(bspTree);
+        var extractionPolys = BuildExtractionPolys(bspTree, WorldBorderExtractionPolys(bspTree));
+        ApplyExtractionPolys(cellBuilders, extractionPolys);
 
+        Log.Information("Initial cell count: {CellCount}", cellBuilders.Count);
         Log.Information("Inserted {N} brushes.", bspBrushes.Count);
         Log.Information("Leaf count: {l}", rawLeafs);
-
-        var borderPolys = WorldBorderPolys(bspTree);
-        var treePolys = CreateTreePolys(bspTree, borderPolys);
-        foreach (var poly in treePolys)
-        {
-            InsertBspGeo(poly);
-        }
-
-        var cellCount = AssignCellIds(bspTree);
-        Log.Information("Assigned {CellCount} cell IDs", cellCount);
 
         var bspPlanes = new List<Plane>();
         var wrTreeNodes = new List<WorldRep.BspTree.Node>();
         ConstructWrTreeNodes(bspPlanes, bspTree, wrTreeNodes, 0x00FFFFFF, -1);
 
-        var cellBuilders = new List<CellBuilder>();
-        bspTree.Traverse(node =>
-        {
-            if (node.CellId != -1 && node.Polys.Count != 0)
-            {
-                cellBuilders.Add(new CellBuilder(node));
-            }
-        });
         var newSplits = SplitComplexCells(cellBuilders);
         var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell()).ToList();
         ApplyAddedSplits(newSplits, bspPlanes, wrTreeNodes);
@@ -472,22 +458,31 @@ public class Portaliser
         return wr;
     }
 
-    private int AssignCellIds(BspNode tree)
+    private List<CellBuilder> AssignCells(BspNode root)
     {
-        var cellCount = 0;
-        tree.Traverse(node =>
+        var cellBuilders = new List<CellBuilder>();
+        var stack = new Stack<BspNode>();
+        stack.Push(root);
+        while (stack.TryPop(out var node))
         {
-            if (node.Polys.Count > 0)
+            if (node is { LeftChild: not null, RightChild: not null })
             {
-                node.CellId = cellCount++;
+                stack.Push(node.LeftChild);
+                stack.Push(node.RightChild);
             }
-            else if (node.Parent != null && node.Parent.CellId != -1)
+
+            if (node.Parent != null && node.Parent.Medium == node.Medium)
             {
                 node.CellId = node.Parent.CellId;
             }
-        });
+            else if (node.Medium != CsgMedia.None && node.Medium != CsgMedia.Solid)
+            {
+                node.CellId = cellBuilders.Count;
+                cellBuilders.Add(new CellBuilder(node.Medium));
+            }
+        }
 
-        return cellCount;
+        return cellBuilders;
     }
 
 // TODO: Use cell based planes rather than spaffing global plane indices
@@ -544,7 +539,7 @@ public class Portaliser
         nodes[parentIndex] = node;
     }
 
-    private List<TreeExtractionPoly> CreateTreePolys(BspNode node, List<TreeExtractionPoly> polys)
+    private List<TreeExtractionPoly> BuildExtractionPolys(BspNode node, List<TreeExtractionPoly> polys)
     {
         if (node.Leaf)
         {
@@ -568,8 +563,8 @@ public class Portaliser
 
         var (leftPolys, rightPolys) = SplitPolys(node, polys);
         var resultPolys = new List<TreeExtractionPoly>();
-        resultPolys.AddRange(CreateTreePolys(node.LeftChild!, leftPolys));
-        resultPolys.AddRange(CreateTreePolys(node.RightChild!, rightPolys));
+        resultPolys.AddRange(BuildExtractionPolys(node.LeftChild!, leftPolys));
+        resultPolys.AddRange(BuildExtractionPolys(node.RightChild!, rightPolys));
 
         if (boundaryWinding.Vertices.Count < 3)
         {
@@ -622,7 +617,7 @@ public class Portaliser
         return result;
     }
 
-    private List<TreeExtractionPoly> WorldBorderPolys(BspNode root)
+    private List<TreeExtractionPoly> WorldBorderExtractionPolys(BspNode root)
     {
         return new Plane[]
         {
@@ -635,44 +630,26 @@ public class Portaliser
         }.Select(p => new TreeExtractionPoly(p, new Winding(p, _worldSize), new BrushTexInfo(), root, root)).ToList();
     }
 
-// BUG: This gives flipped faces sometimes?
-    private void InsertBspGeo(TreeExtractionPoly poly)
+    private static void ApplyExtractionPolys(List<CellBuilder> cellBuilders, List<TreeExtractionPoly> extractionPolys)
     {
-        if (poly.LeftNode == null || poly.RightNode == null)
+        var polyLists = new List<List<TreeExtractionPoly>>(cellBuilders.Count);
+        for (var i = 0; i < cellBuilders.Count; i++)
         {
-            return;
+            polyLists.Add([]);
         }
 
-        var targetNodes = new List<BspNode?>(2);
-        foreach (var node in new[] { poly.LeftNode, poly.RightNode })
+        foreach (var poly in extractionPolys)
         {
-            var medium = node.Medium;
-            if (medium is CsgMedia.Solid or CsgMedia.None)
-            {
-                targetNodes.Add(null);
-                continue;
-            }
+            if (poly.LeftNode == null || poly.RightNode == null) continue;
+            if (poly.LeftNode.CellId == poly.RightNode.CellId) continue;
 
-            var targetNode = node;
-            while (targetNode.Parent != null && targetNode.Parent.Medium == medium)
-            {
-                targetNode = targetNode.Parent;
-            }
-
-            targetNodes.Add(targetNode);
+            if (poly.LeftNode.CellId >= 0) polyLists[poly.LeftNode.CellId].Add(poly);
+            if (poly.RightNode.CellId >= 0) polyLists[poly.RightNode.CellId].Add(poly.Reversed());
         }
 
-        if (targetNodes[0] == targetNodes[1])
+        for (var i = 0; i < cellBuilders.Count; i++)
         {
-            return;
+            cellBuilders[i].AddMergedPolys(polyLists[i]);
         }
-
-        targetNodes[0]?.Polys.Add(poly);
-        targetNodes[1]?.Polys.Add(new TreeExtractionPoly(
-            poly.Plane.Inverse(),
-            poly.Winding.Reversed(),
-            poly.TexInfo,
-            poly.RightNode,
-            poly.LeftNode));
     }
 }

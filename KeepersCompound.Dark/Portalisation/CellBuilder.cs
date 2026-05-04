@@ -28,12 +28,10 @@ public class CellBuilder
         Medium = medium;
     }
 
-    public CellBuilder(BspNode node)
+    public void AddMergedPolys(List<TreeExtractionPoly> polys)
     {
-        Medium = node.Medium;
-
         var mergedPolys = new List<TreeExtractionPoly>();
-        foreach (var poly in node.Polys)
+        foreach (var poly in polys)
         {
             MergeOrInsert(mergedPolys, poly);
         }
