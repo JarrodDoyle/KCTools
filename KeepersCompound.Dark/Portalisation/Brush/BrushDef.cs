@@ -1,4 +1,3 @@
-using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Maths;
 
 namespace KeepersCompound.Dark.Portalisation.Brush;
@@ -6,10 +5,10 @@ namespace KeepersCompound.Dark.Portalisation.Brush;
 public class BrushDef
 {
     public int Time { get; }
-    public Media Operation { get; }
+    public BrushOperation Operation { get; }
     public List<BrushDefFace> Faces { get; }
 
-    public BrushDef(int time, Media operation, List<BrushDefFace> faces)
+    public BrushDef(int time, BrushOperation operation, List<BrushDefFace> faces)
     {
         Time = time;
         Operation = operation;

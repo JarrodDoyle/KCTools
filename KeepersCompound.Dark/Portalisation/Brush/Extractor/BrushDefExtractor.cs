@@ -63,7 +63,7 @@ public class BrushDefExtractor
             faces.Add(new BrushDefFace(plane, texInfo));
         }
 
-        brushDef = new BrushDef(time, brush.Media, faces);
+        brushDef = new BrushDef(time, (BrushOperation)brush.Media, faces);
         return true;
     }
 

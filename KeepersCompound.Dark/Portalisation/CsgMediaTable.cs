@@ -1,4 +1,4 @@
-using KeepersCompound.Dark.Database.Chunks;
+using KeepersCompound.Dark.Portalisation.Brush;
 
 namespace KeepersCompound.Dark.Portalisation;
 
@@ -48,7 +48,7 @@ public static class CsgMediaTable
         ]
     ];
 
-    public static CsgMedia GetMedium(Media operation, CsgMedia currentMedium)
+    public static CsgMedia GetMedium(BrushOperation operation, CsgMedia currentMedium)
     {
         return Table[(int)operation][(int)currentMedium];
     }
