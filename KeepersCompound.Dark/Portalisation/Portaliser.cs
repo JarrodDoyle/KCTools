@@ -25,7 +25,7 @@ public class Portaliser
         var rawLeafs = ComputeBspMediums(bspTree, bspBrushes);
         var cellBuilders = AssignCells(bspTree);
         var initialCellCount = cellBuilders.Count;
-        var extractionPolys = BuildExtractionPolys(bspTree, WorldBorderExtractionPolys(bspTree));
+        var extractionPolys = BuildExtractionPolys(bspTree);
         ApplyExtractionPolys(cellBuilders, extractionPolys);
         var wrTreeBuilder = new WrTreeBuilder();
         wrTreeBuilder.AddCsgTree(bspTree);
@@ -430,11 +430,11 @@ public class Portaliser
         return cellBuilders;
     }
 
-    private List<TreeExtractionPoly> BuildExtractionPolys(BspNode node, List<TreeExtractionPoly> polys)
+    private List<TreeExtractionPoly> BuildExtractionPolys(BspNode node)
     {
-        if (node.Leaf)
+        if (node.LeftChild == null || node.RightChild == null)
         {
-            return polys;
+            return [];
         }
 
         var boundaryWinding = new Winding(node.SplitPlane, _worldSize);
@@ -447,22 +447,16 @@ public class Portaliser
             parent = parent.Parent;
         }
 
-        foreach (var poly in polys)
-        {
-            boundaryWinding.Clip(poly.LeftNode == node ? poly.Plane : poly.Plane.Inverse());
-        }
-
-        var (leftPolys, rightPolys) = SplitPolys(node, polys);
         var resultPolys = new List<TreeExtractionPoly>();
-        resultPolys.AddRange(BuildExtractionPolys(node.LeftChild!, leftPolys));
-        resultPolys.AddRange(BuildExtractionPolys(node.RightChild!, rightPolys));
+        resultPolys.AddRange(BuildExtractionPolys(node.LeftChild));
+        resultPolys.AddRange(BuildExtractionPolys(node.RightChild));
 
         if (boundaryWinding.Vertices.Count < 3)
         {
             return resultPolys;
         }
 
-        resultPolys.AddRange(ClipTreePolys(node.RightChild!, ClipTreePolys(node.LeftChild!, [
+        resultPolys.AddRange(ClipTreePolys(node.RightChild, ClipTreePolys(node.LeftChild, [
             new TreeExtractionPoly(node.SplitPlane, boundaryWinding, node.TexInfo, node.LeftChild, node.RightChild)
         ])));
         return resultPolys;
@@ -506,19 +500,6 @@ public class Portaliser
         var result = ClipTreePolys(node.LeftChild!, leftPolys);
         result.AddRange(ClipTreePolys(node.RightChild!, rightPolys));
         return result;
-    }
-
-    private List<TreeExtractionPoly> WorldBorderExtractionPolys(BspNode root)
-    {
-        return new Plane[]
-        {
-            new(-1, 0, 0, _worldSize), // North
-            new(0, -1, 0, _worldSize), // West
-            new(1, 0, 0, _worldSize), // South
-            new(0, 1, 0, _worldSize), // East
-            new(0, 0, 1, _worldSize), // Top
-            new(0, 0, -1, _worldSize) // Bottom
-        }.Select(p => new TreeExtractionPoly(p, new Winding(p, _worldSize), new BrushTexInfo(), root, root)).ToList();
     }
 
     private static void ApplyExtractionPolys(List<CellBuilder> cellBuilders, List<TreeExtractionPoly> extractionPolys)
