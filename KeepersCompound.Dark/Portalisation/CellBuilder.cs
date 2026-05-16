@@ -303,7 +303,7 @@ public class CellBuilder
 
     private static Side NextVertexSide(TreeExtractionPoly p1, TreeExtractionPoly p2, int i, int j)
     {
-        const float epsilon = 0.0001f;
+        const float epsilon = 0.00001f;
         var v1 = p1.Winding.Vertices[i];
         var v2 = p1.Winding.Vertices[(i + p1.Winding.Vertices.Count - 1) % p1.Winding.Vertices.Count];
         var v3 = p2.Winding.Vertices[(j + 2) % p2.Winding.Vertices.Count];
@@ -313,13 +313,13 @@ public class CellBuilder
 
     private static bool PlanesAreEqual(Plane p1, Plane p2)
     {
-        const float epsilon = 0.0001f;
+        const float epsilon = 0.00001f;
         return Vector3.Dot(p1.Normal, p2.Normal) > 1 - epsilon && float.Abs(p1.D - p2.D) <= epsilon;
     }
 
     private static bool VerticesAreEqual(Vector3 v1, Vector3 v2)
     {
-        const float epsilon = 0.0001f;
+        const float epsilon = 0.00001f;
         return (v1 - v2).LengthSquared() < epsilon;
     }
 }
