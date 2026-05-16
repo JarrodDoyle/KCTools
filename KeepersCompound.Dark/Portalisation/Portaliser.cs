@@ -272,20 +272,13 @@ public class Portaliser
                 var aabb = new Aabb();
                 aabb.AddPoints(cell.Vertices);
                 var dims = aabb.Max - aabb.Min;
-
-                Plane splitPlane;
-                if (dims.X > dims.Y && dims.X > dims.Z)
+                var dimElements = new List<float> { dims[0], dims[1], dims[2] };
+                var splitPlane = dimElements.IndexOf(dimElements.Max()) switch
                 {
-                    splitPlane = new Plane(Vector3.UnitX, -(aabb.Min.X + dims.X / 2f));
-                }
-                else if (dims.Y > dims.X && dims.Y > dims.Z)
-                {
-                    splitPlane = new Plane(Vector3.UnitY, -(aabb.Min.Y + dims.Y / 2f));
-                }
-                else
-                {
-                    splitPlane = new Plane(Vector3.UnitZ, -(aabb.Min.Z + dims.Z / 2f));
-                }
+                    0 => new Plane(Vector3.UnitX, -(aabb.Min.X + dims.X / 2f)),
+                    1 => new Plane(Vector3.UnitY, -(aabb.Min.Y + dims.Y / 2f)),
+                    _ => new Plane(Vector3.UnitZ, -(aabb.Min.Z + dims.Z / 2f)),
+                };
 
                 var leftCell = new CellBuilder(cell.Medium);
                 var rightCell = new CellBuilder(cell.Medium);
@@ -301,20 +294,22 @@ public class Portaliser
                     var (leftWinding, rightWinding) = winding.Split(splitPlane);
                     if (leftWinding.Vertices.Count > 0)
                     {
-                        leftCell.AddPoly(plane, leftWinding, surface.LeftMedia, surface.RightMedia,
-                            surface.Destination, surface.TexInfo);
+                        leftCell.AddPoly(plane, leftWinding, surface.Medium, surface.Destination, surface.TexInfo);
                     }
 
                     if (rightWinding.Vertices.Count > 0)
                     {
-                        rightCell.AddPoly(plane, rightWinding, surface.LeftMedia, surface.RightMedia,
-                            surface.Destination, surface.TexInfo);
+                        rightCell.AddPoly(plane, rightWinding, surface.Medium, surface.Destination, surface.TexInfo);
                     }
 
                     if (rightWinding.Vertices.Count == 0 || surface.Destination == -1)
                     {
                         continue;
                     }
+
+                    // TODO: This can be better handled.
+                    //       If LeftWinding is empty then we can just flat reassign the poly destination rather than
+                    //       trying to split it.
 
                     // Split the appropriate surface on destination
                     var destCell = cells[surface.Destination];
@@ -335,10 +330,17 @@ public class Portaliser
 
                         var destPlane = destCell.Planes[destSurface.PlaneId];
                         var (destWindingLeft, destWindingRight) = destWinding.Split(splitPlane);
-                        destCell.AddPoly(destPlane, destWindingLeft, destSurface.LeftMedia, destSurface.RightMedia, i,
-                            destSurface.TexInfo);
-                        destCell.AddPoly(destPlane, destWindingRight, destSurface.LeftMedia, destSurface.RightMedia,
-                            cells.Count, destSurface.TexInfo); // new cell id
+                        if (destWindingLeft.Vertices.Count > 0)
+                        {
+                            destCell.AddPoly(destPlane, destWindingLeft, destSurface.Medium, i, destSurface.TexInfo);
+                        }
+
+                        if (destWindingRight.Vertices.Count > 0)
+                        {
+                            destCell.AddPoly(destPlane, destWindingRight, destSurface.Medium, cells.Count,
+                                destSurface.TexInfo); // new cell id
+                        }
+
                         break;
                     }
                 }
@@ -352,10 +354,8 @@ public class Portaliser
                         borderWinding.Clip(plane);
                     }
 
-                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cell.Medium, cells.Count,
-                        new BrushTexInfo());
-                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, cell.Medium, i,
-                        new BrushTexInfo());
+                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cells.Count, new BrushTexInfo());
+                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, i, new BrushTexInfo());
                 }
 
                 wrTreeBuilder.AddSplit(splitPlane, i, cells.Count);

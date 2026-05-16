@@ -11,8 +11,7 @@ public class CellBuilder
     {
         public required int PlaneId;
         public required List<int> Indices;
-        public required CsgMedia LeftMedia;
-        public required CsgMedia RightMedia;
+        public required CsgMedia Medium;
         public required int Destination;
         public required BrushTexInfo TexInfo;
     }
@@ -42,23 +41,20 @@ public class CellBuilder
             {
                 PlaneId = AddMergedPlane(Planes, poly.Plane),
                 Indices = poly.Winding.Vertices.Select(v => AddMergedVertex(Vertices, v)).ToList(),
-                LeftMedia = poly.LeftNode?.Medium ?? CsgMedia.None,
-                RightMedia = poly.RightNode?.Medium ?? CsgMedia.None,
+                Medium = poly.RightNode?.Medium ?? CsgMedia.None,
                 Destination = poly.RightNode?.CellId ?? -1,
                 TexInfo = poly.TexInfo,
             });
         }
     }
 
-    public void AddPoly(Plane plane, Winding winding, CsgMedia leftMedia, CsgMedia rightMedia, int destination,
-        BrushTexInfo texInfo)
+    public void AddPoly(Plane plane, Winding winding, CsgMedia rightMedia, int destination, BrushTexInfo texInfo)
     {
         Surfaces.Add(new Surface
         {
             PlaneId = AddMergedPlane(Planes, plane),
             Indices = winding.Vertices.Select(v => AddMergedVertex(Vertices, v)).ToList(),
-            LeftMedia = leftMedia,
-            RightMedia = rightMedia,
+            Medium = rightMedia,
             Destination = destination,
             TexInfo = texInfo,
         });
@@ -107,13 +103,13 @@ public class CellBuilder
         for (var i = 0; i < Surfaces.Count; i++)
         {
             var surface = Surfaces[i];
-            if (surface.RightMedia == CsgMedia.Solid)
+            if (surface.Medium == CsgMedia.Solid)
             {
                 processOrder.Insert(i - portalPolyCount, i);
                 renderPolyCount++;
                 nonPortalVertices += surface.Indices.Count;
             }
-            else if (surface.LeftMedia != surface.RightMedia)
+            else if (Medium != surface.Medium)
             {
                 processOrder.Insert(i - portalPolyCount, i);
                 renderPolyCount++;
@@ -140,8 +136,8 @@ public class CellBuilder
         List<WorldRep.Cell.Lightmap> lms)
     {
         var vs = surface.Indices.Select(vIndex => Vertices[vIndex]).ToList();
-        var lMed = (CsgMedia)((int)surface.LeftMedia % 3);
-        var rMed = (CsgMedia)((int)surface.RightMedia % 3);
+        var lMed = (CsgMedia)((int)Medium % 3);
+        var rMed = (CsgMedia)((int)surface.Medium % 3);
         var destination = surface.Destination;
         var (flags, texId, clutId) = lMed switch
         {
