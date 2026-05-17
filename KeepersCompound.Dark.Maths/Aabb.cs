@@ -20,4 +20,11 @@ public class Aabb
         Min = Vector3.Min(Min, p);
         Max = Vector3.Max(Max, p);
     }
+
+    public bool Contains(Aabb other)
+    {
+        const float epsilon = 0.001f;
+        return other.Min.X >= Min.X - epsilon && other.Min.Y >= Min.Y - epsilon && other.Min.Z >= Min.Z - epsilon &&
+               other.Max.X <= Max.X + epsilon && other.Max.Y <= Max.Y + epsilon && other.Max.Z <= Max.Z + epsilon;
+    }
 }

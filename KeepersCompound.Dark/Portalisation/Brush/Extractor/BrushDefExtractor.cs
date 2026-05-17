@@ -25,7 +25,7 @@ public class BrushDefExtractor
         }
     }
 
-    private static bool TryBuildBrush(BrList.Brush brush, [NotNullWhen(true)] out BrushDef? brushDef)
+    private bool TryBuildBrush(BrList.Brush brush, [NotNullWhen(true)] out BrushDef? brushDef)
     {
         var shape = GetShape(brush);
         var planes = shape.Primitive switch
@@ -45,6 +45,19 @@ public class BrushDefExtractor
             return false;
         }
 
+        foreach (var plane in planes)
+        {
+            if (float.IsNaN(plane.Normal.X) || float.IsNaN(plane.Normal.Y) || float.IsNaN(plane.Normal.Z) ||
+                float.IsNaN(plane.D))
+            {
+                Log.Error("Skipping brush {Id} with invalid plane.", brush.Id);
+                brushDef = null;
+                return false;
+            }
+        }
+
+        var projections = GetTextureProjections(planes);
+
         var translation = Matrix4x4.CreateTranslation(brush.Position);
         var rotation = Matrix4x4.Identity;
         rotation *= Matrix4x4.CreateRotationX(float.DegreesToRadians(brush.Angle.X));
@@ -56,10 +69,12 @@ public class BrushDefExtractor
         for (var i = 0; i < planes.Count; i++)
         {
             var plane = Plane.Transform(Plane.Normalize(planes[i]), transform);
-            var uProjection = Vector3.Transform(Vector3.UnitX, rotation);
-            var vProjection = Vector3.Transform(Vector3.UnitY, rotation);
+            var uProjection = Vector3.Transform(projections[i].Item1, rotation);
+            var vProjection = Vector3.Transform(projections[i].Item2, rotation);
             var texId = brush.Txs[i].Id > 0 ? brush.Txs[i].Id : brush.TextureId;
-            var texInfo = new BrushTexInfo((uint)texId, uProjection, vProjection, 1, 1, 0, Vector2.Zero);
+            var offset = new Vector2(brush.Txs[i].X, brush.Txs[i].Y) / 64f;
+            var scale = (1 << brush.Txs[i].Scale) * (4f / (1 << 16));
+            var texInfo = new BrushTexInfo((uint)texId, uProjection, vProjection, scale, scale, 0, offset);
             faces.Add(new BrushDefFace(plane, texInfo));
         }
 
@@ -169,5 +184,45 @@ public class BrushDefExtractor
 
         planes.Add(new(0, 0, 1, size.Z));
         return planes;
+    }
+
+    private readonly Vector3[][] _projectionAxes =
+    [
+        [Vector3.UnitX, Vector3.UnitY, -Vector3.UnitZ],
+        [Vector3.UnitY, -Vector3.UnitX, -Vector3.UnitZ],
+        [Vector3.UnitZ, Vector3.UnitX, -Vector3.UnitY],
+        [-Vector3.UnitX, -Vector3.UnitY, -Vector3.UnitZ],
+        [-Vector3.UnitY, Vector3.UnitX, -Vector3.UnitZ],
+        [-Vector3.UnitZ, Vector3.UnitX, Vector3.UnitY]
+    ];
+
+    private List<(Vector3, Vector3)> GetTextureProjections(List<Plane> planes)
+    {
+        var projections = new List<(Vector3, Vector3)>();
+        foreach (var plane in planes)
+        {
+            var bestIndex = -1;
+            var bestSize = 0f;
+            for (var i = 0; i < 6; i++)
+            {
+                var size = Vector3.Dot(_projectionAxes[i][0], plane.Normal);
+                if (size > bestSize)
+                {
+                    bestSize = size;
+                    bestIndex = i;
+                }
+            }
+
+            if (bestIndex == -1)
+            {
+                Log.Error("Failed to find plane texture mapping");
+                projections.Add((Vector3.UnitX, Vector3.UnitY));
+                continue;
+            }
+
+            projections.Add((_projectionAxes[bestIndex][1], _projectionAxes[bestIndex][2]));
+        }
+
+        return projections;
     }
 }

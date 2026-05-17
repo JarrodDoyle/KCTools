@@ -26,6 +26,7 @@ public class Portaliser
         var cellBuilders = AssignCells(bspTree);
         var initialCellCount = cellBuilders.Count;
         var extractionPolys = BuildExtractionPolys(bspTree);
+        AssignTexInfo(bspBrushes, extractionPolys);
         ApplyExtractionPolys(cellBuilders, extractionPolys);
         var wrTreeBuilder = new WrTreeBuilder();
         wrTreeBuilder.AddCsgTree(bspTree);
@@ -98,7 +99,6 @@ public class Portaliser
             node.SplitPlane = splitFace.Plane;
             node.LeftChild = new BspNode(node);
             node.RightChild = new BspNode(node);
-            node.TexInfo = splitFace.TexInfo;
 
             var (leftBrushes, rightBrushes) = SplitBrushList(brushes, splitFace.Plane);
             stack.Push((node.LeftChild, leftBrushes));
@@ -200,7 +200,8 @@ public class Portaliser
             }
 
             leftFaces.Add(new TreeInsertionPoly(true, splitPlane, borderWinding, new BrushTexInfo()));
-            rightFaces.Add(new TreeInsertionPoly(true, splitPlane.Inverse(), borderWinding, new BrushTexInfo()));
+            rightFaces.Add(new TreeInsertionPoly(true, splitPlane.Inverse(), borderWinding.Reversed(),
+                new BrushTexInfo()));
         }
         else
         {
@@ -355,7 +356,8 @@ public class Portaliser
                     }
 
                     leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cells.Count, new BrushTexInfo());
-                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding, cell.Medium, i, new BrushTexInfo());
+                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding.Reversed(), cell.Medium, i,
+                        new BrushTexInfo());
                 }
 
                 wrTreeBuilder.AddSplit(splitPlane, i, cells.Count);
@@ -457,7 +459,8 @@ public class Portaliser
         }
 
         resultPolys.AddRange(ClipTreePolys(node.RightChild, ClipTreePolys(node.LeftChild, [
-            new TreeExtractionPoly(node.SplitPlane, boundaryWinding, node.TexInfo, node.LeftChild, node.RightChild)
+            new TreeExtractionPoly(node.SplitPlane, boundaryWinding, new BrushTexInfo(), node.LeftChild,
+                node.RightChild)
         ])));
         return resultPolys;
     }
@@ -500,6 +503,68 @@ public class Portaliser
         var result = ClipTreePolys(node.LeftChild!, leftPolys);
         result.AddRange(ClipTreePolys(node.RightChild!, rightPolys));
         return result;
+    }
+
+    private static void AssignTexInfo(List<InsertionBrush> brushes, List<TreeExtractionPoly> extractionPolys)
+    {
+        var brushAabbs = new List<Aabb>();
+        foreach (var brush in brushes)
+        {
+            var aabb = new Aabb();
+            foreach (var face in brush.Faces)
+            {
+                aabb.AddPoints(face.Winding.Vertices);
+            }
+
+            brushAabbs.Add(aabb);
+        }
+
+        foreach (var extractionPoly in extractionPolys)
+        {
+            // We only care about poly's that will actually be rendered
+            if (extractionPoly is { LeftNode: not null, RightNode: not null } &&
+                extractionPoly.LeftNode.Medium == extractionPoly.RightNode.Medium)
+            {
+                continue;
+            }
+
+            var polyAabb = new Aabb();
+            polyAabb.AddPoints(extractionPoly.Winding.Vertices);
+
+            var bestTexInfo = new BrushTexInfo();
+            for (var i = 0; i < brushes.Count; i++)
+            {
+                var brushAabb = brushAabbs[i];
+                if (!brushAabb.Contains(polyAabb)) continue;
+
+                var coplanarFace = ContainedBrushFace(extractionPoly, brushes[i]);
+                if (coplanarFace >= 0)
+                {
+                    bestTexInfo = brushes[i].Faces[coplanarFace].TexInfo;
+                }
+            }
+
+            extractionPoly.TexInfo = bestTexInfo;
+        }
+    }
+
+    /// <summary>
+    /// Determine which face (if any) of a brush a poly lies on
+    /// </summary>
+    /// <param name="poly">The poly to check</param>
+    /// <param name="brush">The brush it may lie on</param>
+    /// <returns>The face index if the brush contains the poly. Otherwise -1.</returns>
+    private static int ContainedBrushFace(TreeExtractionPoly poly, InsertionBrush brush)
+    {
+        var coplanarFace = -1;
+        for (var i = 0; i < brush.Faces.Count; i++)
+        {
+            var (_, _, counts) = poly.Winding.GetSideDetails(brush.Faces[i].Plane);
+            if (counts[(int)Side.On] == poly.Winding.Vertices.Count) coplanarFace = i;
+            else if (counts[(int)Side.Back] > 0) return -1;
+        }
+
+        return coplanarFace;
     }
 
     private static void ApplyExtractionPolys(List<CellBuilder> cellBuilders, List<TreeExtractionPoly> extractionPolys)

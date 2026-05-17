@@ -8,7 +8,7 @@ public class TreeExtractionPoly
 {
     public Plane Plane { get; }
     public Winding Winding { get; }
-    public BrushTexInfo TexInfo { get; }
+    public BrushTexInfo TexInfo { get; set; }
     public BspNode? LeftNode { get; }
     public BspNode? RightNode { get; }
 

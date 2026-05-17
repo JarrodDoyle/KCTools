@@ -1,5 +1,4 @@
 using System.Numerics;
-using KeepersCompound.Dark.Portalisation.Brush;
 
 namespace KeepersCompound.Dark.Portalisation;
 
@@ -13,7 +12,6 @@ public class BspNode
     public BspNode? LeftChild { get; set; }
     public BspNode? RightChild { get; set; }
 
-    public BrushTexInfo TexInfo { get; set; }
     public int CellId = -1;
     internal SortedSet<int> InsertedBrushIds { get; } = [];
 
@@ -21,7 +19,6 @@ public class BspNode
     {
         Parent = parent;
         Medium = CsgMedia.None;
-        TexInfo = new BrushTexInfo();
     }
 
     public void Traverse(Action<BspNode> action)
