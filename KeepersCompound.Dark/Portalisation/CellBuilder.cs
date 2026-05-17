@@ -166,21 +166,26 @@ public class CellBuilder
             return;
         }
 
-        // This is wholy inaccurate, but just to make things vaguely identifiable on every face
+        var texInfo = surface.TexInfo;
+        var baseU = (Vector3.Dot(texInfo.UProjection, vs[0]) / texInfo.UScale + texInfo.Offset.X) % 4;
+        var baseV = (Vector3.Dot(texInfo.VProjection, vs[0]) / texInfo.VScale + texInfo.Offset.Y) % 4;
+
         var planeNorm = Planes[surface.PlaneId].Normal;
-        var p0 = vs[0];
-        var p1 = vs[1];
-        var xAxis = p1 - p0;
-        var yAxis = Vector3.Cross(planeNorm, xAxis);
-        xAxis = Vector3.Normalize(xAxis);
-        yAxis = Vector3.Normalize(yAxis);
+        var texU = texInfo.UScale * ProjectionLinearEquation(texInfo.UProjection, texInfo.VProjection, planeNorm);
+        var texV = texInfo.VScale * ProjectionLinearEquation(texInfo.VProjection, texInfo.UProjection, planeNorm);
+
+        var l1 = texU.Length();
+        var l2 = texV.Length();
+        var textureMagnitude = l1 > l2 ? l1 : l2;
 
         renderPolys.Add(new WorldRep.Cell.RenderPoly
         {
-            TextureVectors = (xAxis, yAxis),
-            TextureMagnitude = 4,
+            TextureVectors = (texU, texV),
+            TextureBases = (baseU, baseV),
+            TextureMagnitude = textureMagnitude,
             Center = vs.Aggregate(Vector3.Zero, (c, v) => c + v) / vs.Count,
-            TextureId = (ushort)texId
+            TextureId = (ushort)texId,
+            CachedSurface = 0
         });
         lms.Add(new WorldRep.Cell.Lightmap(8, 8, 1, 4));
         lmInfos.Add(new WorldRep.Cell.LightmapInfo
@@ -207,11 +212,8 @@ public class CellBuilder
                 continue;
             }
 
-            // TODO: Handle ensuring same texture data!
-            if (!PlanesAreEqual(poly.Plane, newPoly.Plane))
-            {
-                continue;
-            }
+            if (!PlanesAreEqual(poly.Plane, newPoly.Plane)) continue;
+            if (poly.TexInfo != newPoly.TexInfo) continue;
 
             var (i, j) = FindSharedEdge(poly.Winding.Vertices, newPoly.Winding.Vertices);
             if (i == -1 || j == -1)
@@ -317,5 +319,25 @@ public class CellBuilder
     {
         const float epsilon = 0.00001f;
         return (v1 - v2).LengthSquared() < epsilon;
+    }
+
+    /// <summary>
+    /// Special cased linear equation solver for u = 1, v = n = 0
+    /// </summary>
+    /// <param name="u">U axis</param>
+    /// <param name="v">V axis</param>
+    /// <param name="n">Normal</param>
+    /// <returns>Equation solution</returns>
+    private static Vector3 ProjectionLinearEquation(Vector3 u, Vector3 v, Vector3 n)
+    {
+        var det = u.X * (v.Y * n.Z - n.Y * v.Z) +
+                  v.X * (n.Y * u.Z - u.Y * n.Z) +
+                  n.X * (u.Y * v.Z - v.Y * u.Z);
+
+        return new Vector3(
+            (v.Y * n.Z - n.Y * v.Z) / det,
+            (v.Z * n.X - n.Z * v.X) / det,
+            (v.X * n.Y - n.X * v.Y) / det
+        );
     }
 }
