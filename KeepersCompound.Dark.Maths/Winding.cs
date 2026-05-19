@@ -1,4 +1,5 @@
-﻿using System.Numerics;
+﻿using System.Diagnostics.CodeAnalysis;
+using System.Numerics;
 
 namespace KeepersCompound.Dark.Maths;
 
@@ -125,6 +126,49 @@ public class Winding
         return (distances, sides, sideCounts);
     }
 
+    /// <summary>
+    /// Attempts to merge with another winding.
+    ///
+    /// Note that the caller is responsible for checking that the two windings are coplanar and have the same order.
+    /// </summary>
+    /// <param name="other">The other winding.</param>
+    /// <param name="normal">The plane normal</param>
+    /// <param name="mergedWinding">The newly merged winding, or null.</param>
+    /// <returns>True if the windings were merged, false otherwise.</returns>
+    public bool TryMerge(Winding other, Vector3 normal, [NotNullWhen(true)] out Winding? mergedWinding)
+    {
+        var (i, j) = FindSharedEdge(Vertices, other.Vertices);
+        if (i == -1 || j == -1)
+        {
+            mergedWinding = null;
+            return false;
+        }
+
+        var side1 = NextVertexSide(this, other, normal, i, j);
+        var side2 = NextVertexSide(other, this, normal, j, i);
+        if (side1 == Side.Front || side2 == Side.Front)
+        {
+            mergedWinding = null;
+            return false;
+        }
+
+        var vs1 = Vertices;
+        var vs2 = other.Vertices;
+        var newVertices = new List<Vector3>();
+        for (var k = (i + (side2 == Side.On ? 2 : 1)) % vs1.Count; k != i; k = (k + 1) % vs1.Count)
+        {
+            newVertices.Add(vs1[k]);
+        }
+
+        for (var k = (j + (side1 == Side.On ? 2 : 1)) % vs2.Count; k != j; k = (k + 1) % vs2.Count)
+        {
+            newVertices.Add(vs2[k]);
+        }
+
+        mergedWinding = new Winding { Vertices = newVertices };
+        return true;
+    }
+
     private void ClipInternal(List<Vector3> clippedVertices, float[] distances, Side[] sides)
     {
         for (var i = 0; i < Vertices.Count; i++)
@@ -159,5 +203,35 @@ public class Winding
         {
             clippedVertices.Clear();
         }
+    }
+
+    private static (int, int) FindSharedEdge(List<Vector3> vs1, List<Vector3> vs2)
+    {
+        for (var i = 0; i < vs1.Count; i++)
+        {
+            var p1 = vs1[i];
+            var p2 = vs1[(i + 1) % vs1.Count];
+            for (var j = 0; j < vs2.Count; j++)
+            {
+                var p3 = vs2[j];
+                var p4 = vs2[(j + 1) % vs2.Count];
+                if (p1.EqualsEpsilon(p4) && p2.EqualsEpsilon(p3))
+                {
+                    return (i, j);
+                }
+            }
+        }
+
+        return (-1, -1);
+    }
+
+    private static Side NextVertexSide(Winding w1, Winding w2, Vector3 normal, int i, int j)
+    {
+        const float epsilon = 0.00001f;
+        var v1 = w1.Vertices[i];
+        var v2 = w1.Vertices[(i + w1.Vertices.Count - 1) % w1.Vertices.Count];
+        var v3 = w2.Vertices[(j + 2) % w2.Vertices.Count];
+        var dot = Vector3.Dot(v3 - v1, Vector3.Normalize(Vector3.Cross(normal, v1 - v2)));
+        return dot < epsilon ? dot > -epsilon ? Side.On : Side.Back : Side.Front;
     }
 }

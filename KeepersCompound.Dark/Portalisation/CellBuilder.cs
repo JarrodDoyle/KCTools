@@ -212,37 +212,11 @@ public class CellBuilder
                 continue;
             }
 
-            if (!PlanesAreEqual(poly.Plane, newPoly.Plane)) continue;
+            if (!poly.Plane.EqualsEpsilon(newPoly.Plane)) continue;
             if (poly.TexInfo != newPoly.TexInfo) continue;
+            if (!poly.Winding.TryMerge(newPoly.Winding, poly.Plane.Normal, out var newWinding)) continue;
 
-            var (i, j) = FindSharedEdge(poly.Winding.Vertices, newPoly.Winding.Vertices);
-            if (i == -1 || j == -1)
-            {
-                continue;
-            }
-
-            var side1 = NextVertexSide(poly, newPoly, i, j);
-            var side2 = NextVertexSide(newPoly, poly, j, i);
-            if (side1 == Side.Front || side2 == Side.Front)
-            {
-                continue;
-            }
-
-            // Merge winding into poly!
-            var vs1 = poly.Winding.Vertices;
-            var vs2 = newPoly.Winding.Vertices;
-            var newVertices = new List<Vector3>();
-            for (var k = (i + (side2 == Side.On ? 2 : 1)) % vs1.Count; k != i; k = (k + 1) % vs1.Count)
-            {
-                newVertices.Add(vs1[k]);
-            }
-
-            for (var k = (j + (side1 == Side.On ? 2 : 1)) % vs2.Count; k != j; k = (k + 1) % vs2.Count)
-            {
-                newVertices.Add(vs2[k]);
-            }
-
-            poly.Winding.Vertices = newVertices;
+            poly.Winding.Vertices = newWinding.Vertices;
             polys.RemoveAt(idx);
             newPoly = poly;
             idx = -1; // It's about to get incremented to 0 by the loop, which is the value we really want
@@ -255,7 +229,7 @@ public class CellBuilder
     {
         for (var i = 0; i < planes.Count; i++)
         {
-            if (PlanesAreEqual(plane, planes[i]))
+            if (plane.EqualsEpsilon(planes[i]))
             {
                 return i;
             }
@@ -269,7 +243,7 @@ public class CellBuilder
     {
         for (var i = 0; i < vertices.Count; i++)
         {
-            if (VerticesAreEqual(vertex, vertices[i]))
+            if (vertex.EqualsEpsilon(vertices[i]))
             {
                 return i;
             }
@@ -277,48 +251,6 @@ public class CellBuilder
 
         vertices.Add(vertex);
         return vertices.Count - 1;
-    }
-
-    private static (int, int) FindSharedEdge(List<Vector3> vs1, List<Vector3> vs2)
-    {
-        for (var i = 0; i < vs1.Count; i++)
-        {
-            var p1 = vs1[i];
-            var p2 = vs1[(i + 1) % vs1.Count];
-            for (var j = 0; j < vs2.Count; j++)
-            {
-                var p3 = vs2[j];
-                var p4 = vs2[(j + 1) % vs2.Count];
-                if (VerticesAreEqual(p1, p4) && VerticesAreEqual(p2, p3))
-                {
-                    return (i, j);
-                }
-            }
-        }
-
-        return (-1, -1);
-    }
-
-    private static Side NextVertexSide(TreeExtractionPoly p1, TreeExtractionPoly p2, int i, int j)
-    {
-        const float epsilon = 0.00001f;
-        var v1 = p1.Winding.Vertices[i];
-        var v2 = p1.Winding.Vertices[(i + p1.Winding.Vertices.Count - 1) % p1.Winding.Vertices.Count];
-        var v3 = p2.Winding.Vertices[(j + 2) % p2.Winding.Vertices.Count];
-        var dot = Vector3.Dot(v3 - v1, Vector3.Normalize(Vector3.Cross(p1.Plane.Normal, v1 - v2)));
-        return dot < epsilon ? dot > -epsilon ? Side.On : Side.Back : Side.Front;
-    }
-
-    private static bool PlanesAreEqual(Plane p1, Plane p2)
-    {
-        const float epsilon = 0.00001f;
-        return Vector3.Dot(p1.Normal, p2.Normal) > 1 - epsilon && float.Abs(p1.D - p2.D) <= epsilon;
-    }
-
-    private static bool VerticesAreEqual(Vector3 v1, Vector3 v2)
-    {
-        const float epsilon = 0.00001f;
-        return (v1 - v2).LengthSquared() < epsilon;
     }
 
     /// <summary>
