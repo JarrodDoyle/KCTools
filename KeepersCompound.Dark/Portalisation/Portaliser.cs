@@ -18,15 +18,29 @@ public class Portaliser
         _worldSize = worldSize;
     }
 
-    public (WorldRep, BspNode) Portalise(List<BrushDef> brushDefs)
+    public (WorldRep, BspNode) Portalise(List<BrushDef> brushDefs, bool optimize = true)
     {
         var bspBrushes = BuildBspBrushes(brushDefs);
-        var bspTree = BuildBspTree(bspBrushes);
+        var bspTree = new BspNode(null);
+        InsertBrushes(bspTree, bspBrushes);
         var rawLeafs = ComputeBspMediums(bspTree, bspBrushes);
-        var cellBuilders = AssignCells(bspTree);
-        var initialCellCount = cellBuilders.Count;
         var extractionPolys = BuildExtractionPolys(bspTree);
         AssignTexInfo(bspBrushes, extractionPolys);
+        if (optimize)
+        {
+            var groupedPolys = BuildOptimizePolys(extractionPolys);
+            MergeOptimizePolys(groupedPolys);
+            bspTree = BuildOptimizeBspTree(groupedPolys);
+            InsertBrushes(bspTree, bspBrushes);
+            var optimizeRawLeafs = ComputeBspMediums(bspTree, bspBrushes);
+            extractionPolys = BuildExtractionPolys(bspTree);
+            AssignTexInfo(bspBrushes, extractionPolys);
+            Log.Information("Unique planes: {C}", groupedPolys.Count);
+            Log.Information("Optimize leaf count: {l}", optimizeRawLeafs);
+        }
+
+        var cellBuilders = AssignCells(bspTree);
+        var initialCellCount = cellBuilders.Count;
         ApplyExtractionPolys(cellBuilders, extractionPolys);
         var wrTreeBuilder = new WrTreeBuilder();
         wrTreeBuilder.AddCsgTree(bspTree);
@@ -68,44 +82,38 @@ public class Portaliser
         return bspBrushes;
     }
 
-    private BspNode BuildBspTree(List<InsertionBrush> bspBrushes)
+    private void InsertBrushes(BspNode root, List<InsertionBrush> bspBrushes)
     {
-        var root = new BspNode(null);
         var stack = new Stack<(BspNode, List<InsertionBrush>)>();
         stack.Push((root, bspBrushes));
         while (stack.TryPop(out var info))
         {
             var (node, brushes) = info;
 
-            // If we didn't find a split face that means every face of every remaining brush is already being used as a
-            // split somewhere in the tree and the remaining brushes in out list are fully contained by the current node.
-            // This *should* mean that the current node is a leaf.
-            if (!TryFindSplitFace(brushes, out var splitFace))
+            if (node.LeftChild == null || node.RightChild == null)
             {
-                if (!node.Leaf)
+                // If we didn't find a split face that means every face of every remaining brush is already being used as a
+                // split somewhere in the tree and the remaining brushes in out list are fully contained by the current node.
+                if (!TryFindSplitFace(brushes, out var splitFace))
                 {
-                    Log.Error("Couldn't find split for non-leaf node.");
+                    foreach (var brush in brushes)
+                    {
+                        node.InsertedBrushIds.Add(brush.Time);
+                    }
+
+                    continue;
                 }
 
-                foreach (var brush in brushes)
-                {
-                    node.InsertedBrushIds.Add(brush.Time);
-                }
-
-                continue;
+                splitFace.UsedForSplit = true;
+                node.SplitPlane = splitFace.Plane;
+                node.LeftChild = new BspNode(node);
+                node.RightChild = new BspNode(node);
             }
 
-            splitFace.UsedForSplit = true;
-            node.SplitPlane = splitFace.Plane;
-            node.LeftChild = new BspNode(node);
-            node.RightChild = new BspNode(node);
-
-            var (leftBrushes, rightBrushes) = SplitBrushList(brushes, splitFace.Plane);
+            var (leftBrushes, rightBrushes) = SplitBrushList(brushes, node.SplitPlane);
             stack.Push((node.LeftChild, leftBrushes));
             stack.Push((node.RightChild, rightBrushes));
         }
-
-        return root;
     }
 
     /// <summary>
@@ -588,5 +596,187 @@ public class Portaliser
         {
             cellBuilders[i].AddMergedPolys(polyLists[i]);
         }
+    }
+
+    private static List<(Plane, List<OptimizePoly>)> BuildOptimizePolys(List<TreeExtractionPoly> extractionPolys)
+    {
+        var groupedPolys = new List<(Plane, List<OptimizePoly>)>();
+        foreach (var poly in extractionPolys)
+        {
+            if (poly is { LeftNode: not null, RightNode: not null } &&
+                poly.LeftNode.Medium == poly.RightNode.Medium)
+            {
+                continue;
+            }
+
+            var added = false;
+            foreach (var (plane, polys) in groupedPolys)
+            {
+                var sameDir = plane.EqualsEpsilon(poly.Plane);
+                if (sameDir || plane.EqualsEpsilon(poly.Plane.Inverse()))
+                {
+                    polys.Add(new OptimizePoly(poly.Winding, !sameDir));
+                    added = true;
+                    break;
+                }
+            }
+
+            if (!added)
+            {
+                groupedPolys.Add((poly.Plane, [new OptimizePoly(poly.Winding, false)]));
+            }
+        }
+
+        return groupedPolys;
+    }
+
+    private static void MergeOptimizePolys(List<(Plane, List<OptimizePoly>)> groupedPolys)
+    {
+        // TODO: Is this whole step necessary? I think it fundamentally doesn't really change the result.
+        //       Really I need to benchmark if it's faster to do this + BSP, or just BSP raw.
+        foreach (var (plane, polys) in groupedPolys)
+        {
+            var mergedPolys = new List<OptimizePoly>();
+            foreach (var originalPoly in polys)
+            {
+                var newPoly = originalPoly;
+                for (var i = 0; i < mergedPolys.Count; i++)
+                {
+                    var poly = mergedPolys[i];
+                    if (newPoly.Flipped != poly.Flipped) continue;
+
+                    var normal = newPoly.Flipped ? -plane.Normal : plane.Normal;
+                    if (!poly.Winding.TryMerge(newPoly.Winding, normal, out var newWinding)) continue;
+
+                    poly.Winding.Vertices = newWinding.Vertices;
+                    mergedPolys.RemoveAt(i);
+                    newPoly = poly;
+                    i = -1;
+                }
+
+                mergedPolys.Add(newPoly);
+            }
+
+            polys.Clear();
+            polys.AddRange(mergedPolys);
+        }
+    }
+
+    private static BspNode BuildOptimizeBspTree(List<(Plane, List<OptimizePoly>)> groupedOptimizePolys)
+    {
+        // TODO: Choose better plane
+        var root = new BspNode(null);
+        var stack = new Stack<(BspNode, List<(Plane, List<OptimizePoly>)>)>();
+        stack.Push((root, groupedOptimizePolys));
+        while (stack.TryPop(out var info))
+        {
+            var (node, groupedPolys) = info;
+            if (groupedPolys.Count == 0) continue;
+
+            var splitIndex = -1;
+            var bestScore = int.MaxValue;
+            for (var i = 0; i < groupedPolys.Count; i++)
+            {
+                var splitPlane = groupedPolys[i].Item1;
+                var score = ScoreOptimizeSplitPlane(splitPlane, groupedPolys);
+                if (score < bestScore)
+                {
+                    splitIndex = i;
+                    bestScore = score;
+                }
+            }
+
+            var plane = groupedPolys[splitIndex].Item1;
+            groupedPolys.RemoveAt(splitIndex);
+
+            node.SplitPlane = plane;
+            node.LeftChild = new BspNode(node);
+            node.RightChild = new BspNode(node);
+
+            var (leftGroupedPolys, rightGroupedPolys) = SplitGroupedPolys(groupedPolys, plane);
+            stack.Push((node.LeftChild, leftGroupedPolys));
+            stack.Push((node.RightChild, rightGroupedPolys));
+        }
+
+        return root;
+    }
+
+    private static int ScoreOptimizeSplitPlane(Plane splitPlane, List<(Plane, List<OptimizePoly>)> groupedPolys)
+    {
+        var splits = 0;
+        var front = 0;
+        var back = 0;
+        foreach (var (plane, polys) in groupedPolys)
+        {
+            foreach (var poly in polys)
+            {
+                if (plane.EqualsEpsilon(splitPlane)) continue;
+
+                var (_, _, counts) = poly.Winding.GetSideDetails(splitPlane);
+                if (counts[(int)Side.Back] == 0)
+                {
+                    front++;
+                }
+                else if (counts[(int)Side.Front] == 0)
+                {
+                    back++;
+                }
+                else
+                {
+                    splits++;
+                }
+            }
+        }
+
+        var absNorm = Vector3.Abs(splitPlane.Normal);
+        var axial = absNorm.EqualsEpsilon(Vector3.UnitX) ||
+                    absNorm.EqualsEpsilon(Vector3.UnitY) ||
+                    absNorm.EqualsEpsilon(Vector3.UnitZ);
+        return splits * 2 + int.Abs(front - back) + (axial ? 0 : (front + back + splits) / 10);
+    }
+
+    private static (List<(Plane, List<OptimizePoly>)>, List<(Plane, List<OptimizePoly>)>)
+        SplitGroupedPolys(List<(Plane, List<OptimizePoly>)> groupedPolys, Plane splitPlane)
+    {
+        var leftGroupedPolys = new List<(Plane, List<OptimizePoly>)>();
+        var rightGroupedPolys = new List<(Plane, List<OptimizePoly>)>();
+        foreach (var group in groupedPolys)
+        {
+            // TODO: The majority of planes are axial, so there's probably an early out check for parallel planes
+            var (plane, polys) = group;
+            var fullCounts = new[] { 0, 0, 0 };
+            foreach (var poly in polys)
+            {
+                var (_, _, counts) = poly.Winding.GetSideDetails(splitPlane);
+                fullCounts[0] += counts[0];
+                fullCounts[1] += counts[1];
+                fullCounts[2] += counts[2];
+            }
+
+            if (fullCounts[(int)Side.Back] == 0)
+            {
+                leftGroupedPolys.Add(group);
+            }
+            else if (fullCounts[(int)Side.Front] == 0)
+            {
+                rightGroupedPolys.Add(group);
+            }
+            else
+            {
+                var leftPolys = new List<OptimizePoly>();
+                var rightPolys = new List<OptimizePoly>();
+                foreach (var poly in polys)
+                {
+                    var (leftWinding, rightWinding) = poly.Winding.Split(splitPlane);
+                    if (leftWinding.Vertices.Count > 0) leftPolys.Add(new OptimizePoly(leftWinding, poly.Flipped));
+                    if (rightWinding.Vertices.Count > 0) rightPolys.Add(new OptimizePoly(rightWinding, poly.Flipped));
+                }
+
+                leftGroupedPolys.Add((plane, leftPolys));
+                rightGroupedPolys.Add((plane, rightPolys));
+            }
+        }
+
+        return (leftGroupedPolys, rightGroupedPolys);
     }
 }
