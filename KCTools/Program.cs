@@ -75,6 +75,9 @@ public class RootCommand
         [CliOption(Description = "Automatically obtain campaign name from `DromEd.log`. Overrides `--campaign-name`.")]
         public bool AutoCampaign { get; set; } = false;
 
+        [CliOption(Description = "Disables the BSP/WorldRep optimisation step. Faster output, but increased cell count.")]
+        public bool FastMode { get; set; } = false;
+
         public int Run()
         {
             Program.ConfigureLogger(Quiet);
@@ -134,7 +137,7 @@ public class RootCommand
                 // TODO: - Insert blockable brushes
                 var brushDefs = extractor.BrushDefs;
                 var portaliser = new Portaliser(1000f);
-                var wr = Timing.TimeStage("Portalise", () => portaliser.Portalise(brushDefs));
+                var wr = Timing.TimeStage("Portalise", () => portaliser.Portalise(brushDefs, !FastMode));
                 mission.Chunks[wr.Header.Name] = wr;
 
                 if (resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
