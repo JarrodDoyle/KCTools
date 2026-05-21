@@ -1,9 +1,9 @@
 using System.Numerics;
 using KeepersCompound.Dark.Database.Chunks;
 using KeepersCompound.Dark.Maths;
-using KeepersCompound.Dark.Portalisation.Brush;
+using KeepersCompound.Portalisation.Brush;
 
-namespace KeepersCompound.Dark.Portalisation;
+namespace KeepersCompound.Portalisation;
 
 public class CellBuilder
 {

@@ -1,4 +1,4 @@
-namespace KeepersCompound.Dark.Portalisation;
+namespace KeepersCompound.Portalisation;
 
 public enum CsgMedia
 {

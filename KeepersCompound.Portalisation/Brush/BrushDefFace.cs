@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace KeepersCompound.Dark.Portalisation.Brush;
+namespace KeepersCompound.Portalisation.Brush;
 
 public struct BrushDefFace
 {

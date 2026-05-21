@@ -1,6 +1,6 @@
 using System.Numerics;
 
-namespace KeepersCompound.Dark.Portalisation;
+namespace KeepersCompound.Portalisation;
 
 public class BspNode
 {

@@ -1,4 +1,4 @@
-namespace KeepersCompound.Dark.Portalisation.Brush.Extractor;
+namespace KeepersCompound.Portalisation.Brush.Extractor;
 
 internal enum PrimitiveType
 {

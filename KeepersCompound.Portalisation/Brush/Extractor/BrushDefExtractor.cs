@@ -3,7 +3,7 @@ using System.Numerics;
 using KeepersCompound.Dark.Database.Chunks;
 using Serilog;
 
-namespace KeepersCompound.Dark.Portalisation.Brush.Extractor;
+namespace KeepersCompound.Portalisation.Brush.Extractor;
 
 public class BrushDefExtractor
 {

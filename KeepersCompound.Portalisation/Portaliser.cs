@@ -2,12 +2,12 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
-using KeepersCompound.Dark.Portalisation.Brush;
 using KeepersCompound.Dark.Maths;
+using KeepersCompound.Portalisation.Brush;
 using Serilog;
 using Version = KeepersCompound.Dark.Database.Version;
 
-namespace KeepersCompound.Dark.Portalisation;
+namespace KeepersCompound.Portalisation;
 
 public class Portaliser
 {
@@ -540,6 +540,7 @@ public class Portaliser
             polyAabb.AddPoints(extractionPoly.Winding.Vertices);
 
             var bestTexInfo = new BrushTexInfo();
+            var found = false;
             for (var i = 0; i < brushes.Count; i++)
             {
                 var brushAabb = brushAabbs[i];
@@ -549,7 +550,13 @@ public class Portaliser
                 if (coplanarFace >= 0)
                 {
                     bestTexInfo = brushes[i].Faces[coplanarFace].TexInfo;
+                    found = true;
                 }
+            }
+
+            if (!found)
+            {
+                Log.Error("Untextured poly: {P}", extractionPoly.Plane);
             }
 
             extractionPoly.TexInfo = bestTexInfo;

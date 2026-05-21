@@ -1,6 +1,6 @@
-using KeepersCompound.Dark.Portalisation.Brush;
+using KeepersCompound.Portalisation.Brush;
 
-namespace KeepersCompound.Dark.Portalisation;
+namespace KeepersCompound.Portalisation;
 
 public static class CsgMediaTable
 {

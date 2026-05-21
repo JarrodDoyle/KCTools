@@ -1,7 +1,7 @@
 using System.Numerics;
 using KeepersCompound.Dark.Database.Chunks;
 
-namespace KeepersCompound.Dark.Portalisation;
+namespace KeepersCompound.Portalisation;
 
 public class WrTreeBuilder
 {

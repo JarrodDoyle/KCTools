@@ -24,6 +24,7 @@
     <ProjectReference Include="..\KeepersCompound.Dark\KeepersCompound.Dark.csproj" />
     <ProjectReference Include="..\KeepersCompound.Formats.Images\KeepersCompound.Formats.Images.csproj" />
     <ProjectReference Include="..\KeepersCompound.Lighting\KeepersCompound.Lighting.csproj" />
+    <ProjectReference Include="..\KeepersCompound.Portalisation\KeepersCompound.Portalisation.csproj" />
   </ItemGroup>
 
 </Project>

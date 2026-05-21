@@ -1,4 +1,4 @@
-namespace KeepersCompound.Dark.Portalisation.Brush;
+namespace KeepersCompound.Portalisation.Brush;
 
 public class BrushDef
 {
