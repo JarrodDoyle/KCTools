@@ -426,7 +426,7 @@ public class WorldRep : IChunk
             Vertices = vertices;
             Polys = polys;
             RenderPolys = renderPolys;
-            IndexCount = (byte)indices.Length;
+            IndexCount = (uint)indices.Length;
             Indices = indices;
             Planes = planes;
             AnimLights = animLights;
