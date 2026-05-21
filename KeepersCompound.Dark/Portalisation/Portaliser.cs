@@ -612,8 +612,8 @@ public class Portaliser
             var added = false;
             foreach (var (plane, polys) in groupedPolys)
             {
-                var sameDir = plane.EqualsEpsilon(poly.Plane);
-                if (sameDir || plane.EqualsEpsilon(poly.Plane.Inverse()))
+                var sameDir = plane.EqualsEpsilon(poly.Plane, 0.0001f);
+                if (sameDir || plane.EqualsEpsilon(poly.Plane.Inverse(), 0.0001f))
                 {
                     polys.Add(new OptimizePoly(poly.Winding, !sameDir));
                     added = true;
