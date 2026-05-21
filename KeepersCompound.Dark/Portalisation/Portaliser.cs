@@ -18,7 +18,7 @@ public class Portaliser
         _worldSize = worldSize;
     }
 
-    public (WorldRep, BspNode) Portalise(List<BrushDef> brushDefs, bool optimize = true)
+    public WorldRep Portalise(List<BrushDef> brushDefs, bool optimize = true)
     {
         var bspBrushes = BuildBspBrushes(brushDefs);
         var bspTree = new BspNode(null);
@@ -54,7 +54,7 @@ public class Portaliser
         Log.Information("Leaf count: {l}", rawLeafs);
         Log.Information("Initial cell count: {CellCount}", initialCellCount);
         Log.Information("Final cell count: {CellCount}", wrCells.Count);
-        return (wr, bspTree);
+        return wr;
     }
 
     private List<InsertionBrush> BuildBspBrushes(List<BrushDef> brushDefs)

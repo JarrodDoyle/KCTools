@@ -18,7 +18,6 @@ using SharpGLTF.Geometry.VertexTypes;
 using SharpGLTF.Materials;
 using SharpGLTF.Memory;
 using SharpGLTF.Scenes;
-using SharpGLTF.Schema2;
 using SharpGLTF.Transforms;
 using AlphaMode = SharpGLTF.Materials.AlphaMode;
 
@@ -81,13 +80,6 @@ public class RootCommand
             Program.ConfigureLogger(Quiet);
             Log.Information("KCTools version: {version}", Assembly.GetEntryAssembly()?.GetName().Version);
 
-            var exportDir = $"{AppDomain.CurrentDomain.BaseDirectory}/portals/";
-            var meshPath = $"{exportDir}{OutputName}.glb";
-            if (!Directory.Exists(exportDir))
-            {
-                Directory.CreateDirectory(exportDir);
-            }
-
             Timing.Reset();
             var exitCode = Timing.TimeStage("Total", () =>
             {
@@ -142,11 +134,8 @@ public class RootCommand
                 // TODO: - Insert blockable brushes
                 var brushDefs = extractor.BrushDefs;
                 var portaliser = new Portaliser(1000f);
-                var (wr, tree) = Timing.TimeStage("Portalise", () => portaliser.Portalise(brushDefs));
+                var wr = Timing.TimeStage("Portalise", () => portaliser.Portalise(brushDefs));
                 mission.Chunks[wr.Header.Name] = wr;
-                // var mesh = Timing.TimeStage("Generate GLB", () => GenerateMesh(tree, false));
-                // Log.Information("Saving mesh: {Path}", meshPath);
-                // mesh.SaveGLB(meshPath);
 
                 if (resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
                     resources.TryGetFilePath(virtualMisPath, out var misPath))
@@ -165,11 +154,6 @@ public class RootCommand
                 return ExitCode.Success;
             });
             Timing.LogAll();
-
-#if DEBUG
-            const string scriptPath = "/nvme/Dev/thief/kc-dark/KCTools/blender_import_gltf.py";
-            // Process.Start("blender", ["-P", scriptPath, "--", meshPath]).WaitForExit();
-#endif
 
             return (int)exitCode;
         }
@@ -208,62 +192,6 @@ public class RootCommand
                 Log.Error("Failed to automatically obtain campaign name.");
             }
         }
-
-        // private ModelRoot GenerateMesh(BspNode tree, bool perCellMaterials)
-        // {
-        //     var mat = new MaterialBuilder()
-        //         .WithDoubleSide(false)
-        //         .WithBaseColor(new Vector4(1, 1, 1, 1));
-        //
-        //     var mesh = new MeshBuilder<VertexPosition>();
-        //     var prim = mesh.UsePrimitive(mat);
-        //     var cellCount = 0;
-        //     var random = new Random();
-        //     tree.Traverse(bspNode =>
-        //     {
-        //         if (bspNode.Polys.Count == 0 || bspNode.Medium == CsgMedia.Solid)
-        //         {
-        //             return;
-        //         }
-        //
-        //         if (perCellMaterials)
-        //         {
-        //             prim = mesh.UsePrimitive(new MaterialBuilder()
-        //                 .WithDoubleSide(false)
-        //                 .WithBaseColor(new Vector4(random.NextSingle(), random.NextSingle(), random.NextSingle(), 1)));
-        //         }
-        //
-        //         foreach (var poly in bspNode.Polys)
-        //         {
-        //             if (poly is { LeftNode: not null, RightNode: not null } &&
-        //                 poly.LeftNode.Medium == poly.RightNode.Medium)
-        //             {
-        //                 continue;
-        //             }
-        //
-        //             var vs = poly.Winding.Vertices;
-        //             for (var i = 1; i < poly.Winding.Vertices.Count - 1; i++)
-        //             {
-        //                 prim.AddTriangle(
-        //                     new VertexPosition(vs[0]),
-        //                     new VertexPosition(vs[i + 1]),
-        //                     new VertexPosition(vs[i])
-        //                 );
-        //             }
-        //         }
-        //
-        //         cellCount++;
-        //     });
-        //
-        //     Log.Information("Cell count: {C}", cellCount);
-        //
-        //     var scene = new SceneBuilder();
-        //     var node = new NodeBuilder();
-        //     scene.AddRigidMesh(mesh, node);
-        //     scene.ApplyBasisTransform(Matrix4x4.CreateRotationX(float.DegreesToRadians(-90)));
-        //
-        //     return scene.ToGltf2();
-        // }
     }
 
     [CliCommand(Description = "Compute lightmaps for a NewDark .MIS/.COW")]
