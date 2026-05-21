@@ -27,6 +27,13 @@ public class BrushDefExtractor
 
     private bool TryBuildBrush(BrList.Brush brush, [NotNullWhen(true)] out BrushDef? brushDef)
     {
+        if (brush.Size.X == 0 || brush.Size.Y == 0 || brush.Size.Z == 0)
+        {
+            Log.Error("Skipping zero-sized brush {Id}.", brush.Id);
+            brushDef = null;
+            return false;
+        }
+
         var shape = GetShape(brush);
         var planes = shape.Primitive switch
         {
