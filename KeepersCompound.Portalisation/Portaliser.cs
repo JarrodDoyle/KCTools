@@ -24,21 +24,20 @@ public class Portaliser
         var bspTree = new BspNode(null);
         InsertBrushes(bspTree, planeManager, bspBrushes);
         var rawLeafs = ComputeBspMediums(bspTree, bspBrushes);
-        var extractionPolys = BuildExtractionPolys(bspTree, planeManager);
-        AssignTexInfo(bspBrushes, extractionPolys, planeManager);
         if (optimize)
         {
-            var groupedPolys = BuildOptimizePolys(extractionPolys);
+            var initialExtractionPolys = BuildExtractionPolys(bspTree, planeManager);
+            var groupedPolys = BuildOptimizePolys(initialExtractionPolys);
             MergeOptimizePolys(groupedPolys, planeManager);
             bspTree = BuildOptimizeBspTree(planeManager, groupedPolys);
             InsertBrushes(bspTree, planeManager, bspBrushes);
             var optimizeRawLeafs = ComputeBspMediums(bspTree, bspBrushes);
-            extractionPolys = BuildExtractionPolys(bspTree, planeManager);
-            AssignTexInfo(bspBrushes, extractionPolys, planeManager);
             Log.Information("Unique planes: {C}", groupedPolys.Count);
             Log.Information("Optimize leaf count: {l}", optimizeRawLeafs);
         }
 
+        var extractionPolys = BuildExtractionPolys(bspTree, planeManager);
+        AssignTexInfo(bspBrushes, extractionPolys, planeManager);
         var cellBuilders = AssignCells(bspTree);
         var initialCellCount = cellBuilders.Count;
         ApplyExtractionPolys(planeManager, cellBuilders, extractionPolys);
@@ -783,9 +782,9 @@ public class Portaliser
     }
 
     private static (List<(int, List<OptimizePoly>)>, List<(int, List<OptimizePoly>)>) SplitGroupedPolys(
-            PlaneManager planeManager,
-            List<(int, List<OptimizePoly>)> groupedPolys,
-            int splitPlaneId)
+        PlaneManager planeManager,
+        List<(int, List<OptimizePoly>)> groupedPolys,
+        int splitPlaneId)
     {
         var splitPlane = planeManager.GetPlane(splitPlaneId);
         var leftGroupedPolys = new List<(int, List<OptimizePoly>)>();
