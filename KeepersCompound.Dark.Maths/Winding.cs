@@ -47,7 +47,7 @@ public class Winding
         return reversed;
     }
 
-    public void Clip(Plane splitPlane, float epsilon = 0.001f)
+    public void Clip(Plane splitPlane, float epsilon = 0.01f)
     {
         if (Vertices.Count == 0)
         {
@@ -71,7 +71,7 @@ public class Winding
         Vertices = newVertices;
     }
 
-    public (Winding, Winding) Split(Plane splitPlane, float epsilon = 0.001f)
+    public (Winding, Winding) Split(Plane splitPlane, float epsilon = 0.01f)
     {
         var left = new Winding();
         var right = new Winding();
@@ -109,7 +109,7 @@ public class Winding
         return (left, right);
     }
 
-    public (float[], Side[], int[]) GetSideDetails(Plane plane, float epsilon = 0.001f)
+    public (float[], Side[], int[]) GetSideDetails(Plane plane, float epsilon = 0.01f)
     {
         var distances = new float[Vertices.Count];
         var sides = new Side[Vertices.Count];
@@ -227,7 +227,7 @@ public class Winding
 
     private static Side NextVertexSide(Winding w1, Winding w2, Vector3 normal, int i, int j)
     {
-        const float epsilon = 0.00001f;
+        const float epsilon = 0.01f;
         var v1 = w1.Vertices[i];
         var v2 = w1.Vertices[(i + w1.Vertices.Count - 1) % w1.Vertices.Count];
         var v3 = w2.Vertices[(j + 2) % w2.Vertices.Count];

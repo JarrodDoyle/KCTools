@@ -19,8 +19,8 @@ public class PlaneManager
         var reversePlane = plane.Inverse();
         for (var i = 0; i < Planes.Count; i++)
         {
-            if (plane.EqualsEpsilon(Planes[i])) return i + 1;
-            if (reversePlane.EqualsEpsilon(ReversePlanes[i])) return -(i + 1);
+            if (plane.EqualsEpsilon(Planes[i], 0.01f)) return i + 1;
+            if (reversePlane.EqualsEpsilon(ReversePlanes[i], 0.01f)) return -(i + 1);
         }
 
         Planes.Add(plane);
