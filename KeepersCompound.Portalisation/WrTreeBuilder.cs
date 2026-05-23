@@ -14,9 +14,9 @@ public class WrTreeBuilder
         Nodes = [];
     }
 
-    public void AddCsgTree(BspNode csgRoot)
+    public void AddCsgTree(PlaneManager planeManager, BspNode csgRoot)
     {
-        AddCsgTreeInternal(csgRoot, 0x00FFFFFF, -1);
+        AddCsgTreeInternal(planeManager, csgRoot, 0x00FFFFFF, -1);
     }
 
     public void AddSplit(Plane plane, int fromCell, int toCell)
@@ -70,6 +70,7 @@ public class WrTreeBuilder
     }
 
     private void AddCsgTreeInternal(
+        PlaneManager planeManager,
         BspNode tree,
         int parentIndex,
         int cellId)
@@ -95,19 +96,19 @@ public class WrTreeBuilder
         }
 
         node.PlaneId = Planes.Count;
-        Planes.Add(tree.SplitPlane);
+        Planes.Add(planeManager.GetPlane(tree.SplitPlane));
         Nodes.Add(node);
         parentIndex = Nodes.Count - 1;
         if (tree.LeftChild != null && tree.LeftChild.Medium != CsgMedia.Solid)
         {
             node.InsideIndex = Nodes.Count;
-            AddCsgTreeInternal(tree.LeftChild, parentIndex, cellId);
+            AddCsgTreeInternal(planeManager, tree.LeftChild, parentIndex, cellId);
         }
 
         if (tree.RightChild != null && tree.RightChild.Medium != CsgMedia.Solid)
         {
             node.OutsideIndex = Nodes.Count;
-            AddCsgTreeInternal(tree.RightChild, parentIndex, cellId);
+            AddCsgTreeInternal(planeManager, tree.RightChild, parentIndex, cellId);
         }
 
         if (node.OutsideIndex != 0x00FFFFFF && node.InsideIndex == 0x00FFFFFF)

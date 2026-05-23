@@ -1,12 +1,10 @@
-using System.Numerics;
-
 namespace KeepersCompound.Portalisation;
 
 public class BspNode
 {
     public bool Leaf => LeftChild == null && RightChild == null;
     public CsgMedia Medium { get; set; }
-    public Plane SplitPlane { get; set; }
+    public int SplitPlane { get; set; }
 
     public BspNode? Parent { get; }
     public BspNode? LeftChild { get; set; }

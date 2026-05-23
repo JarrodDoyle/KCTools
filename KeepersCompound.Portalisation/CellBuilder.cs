@@ -19,7 +19,7 @@ public class CellBuilder
     public bool NeedsSplit => Vertices.Count > 128 || Surfaces.Count > 64;
     public CsgMedia Medium { get; }
     public List<Vector3> Vertices { get; } = [];
-    public List<Plane> Planes { get; } = [];
+    public List<int> PlaneIds { get; } = [];
     public List<Surface> Surfaces { get; } = [];
 
     public CellBuilder(CsgMedia medium)
@@ -27,19 +27,19 @@ public class CellBuilder
         Medium = medium;
     }
 
-    public void AddMergedPolys(List<TreeExtractionPoly> polys)
+    public void AddMergedPolys(PlaneManager planeManager, List<TreeExtractionPoly> polys)
     {
         var mergedPolys = new List<TreeExtractionPoly>();
         foreach (var poly in polys)
         {
-            MergeOrInsert(mergedPolys, poly);
+            MergeOrInsert(planeManager, mergedPolys, poly);
         }
 
         foreach (var poly in mergedPolys)
         {
             Surfaces.Add(new Surface
             {
-                PlaneId = AddMergedPlane(Planes, poly.Plane),
+                PlaneId = AddMergedPlane(PlaneIds, poly.Plane),
                 Indices = poly.Winding.Vertices.Select(v => AddMergedVertex(Vertices, v)).ToList(),
                 Medium = poly.RightNode?.Medium ?? CsgMedia.None,
                 Destination = poly.RightNode?.CellId ?? -1,
@@ -48,11 +48,11 @@ public class CellBuilder
         }
     }
 
-    public void AddPoly(Plane plane, Winding winding, CsgMedia rightMedia, int destination, BrushTexInfo texInfo)
+    public void AddPoly(int planeId, Winding winding, CsgMedia rightMedia, int destination, BrushTexInfo texInfo)
     {
         Surfaces.Add(new Surface
         {
-            PlaneId = AddMergedPlane(Planes, plane),
+            PlaneId = AddMergedPlane(PlaneIds, planeId),
             Indices = winding.Vertices.Select(v => AddMergedVertex(Vertices, v)).ToList(),
             Medium = rightMedia,
             Destination = destination,
@@ -60,10 +60,10 @@ public class CellBuilder
         });
     }
 
-    public WorldRep.Cell ToCell()
+    public WorldRep.Cell ToCell(PlaneManager planeManager)
     {
         var vertices = new List<Vector3>();
-        var planes = new List<Plane>();
+        var planeIds = new List<int>();
         var indices = new List<byte>();
         var polys = new List<WorldRep.Cell.Poly>();
         var renderPolys = new List<WorldRep.Cell.RenderPoly>();
@@ -73,9 +73,10 @@ public class CellBuilder
 
         foreach (var surface in processOrder.Select(idx => Surfaces[idx]))
         {
-            ProcessSurface(surface, vertices, planes, indices, polys, renderPolys, lmInfos, lms);
+            ProcessSurface(planeManager, surface, vertices, planeIds, indices, polys, renderPolys, lmInfos, lms);
         }
 
+        var planes = planeIds.Select(planeManager.GetPlane).ToList();
         return new WorldRep.Cell(
             (byte)Medium,
             0,
@@ -126,9 +127,10 @@ public class CellBuilder
     }
 
     private void ProcessSurface(
+        PlaneManager planeManager,
         Surface surface,
         List<Vector3> vertices,
-        List<Plane> planes,
+        List<int> planeIds,
         List<byte> indices,
         List<WorldRep.Cell.Poly> polys,
         List<WorldRep.Cell.RenderPoly> renderPolys,
@@ -155,7 +157,7 @@ public class CellBuilder
         polys.Add(new WorldRep.Cell.Poly
         {
             VertexCount = (byte)surface.Indices.Count,
-            PlaneId = (byte)AddMergedPlane(planes, Planes[surface.PlaneId]),
+            PlaneId = (byte)AddMergedPlane(planeIds, PlaneIds[surface.PlaneId]),
             Destination = (ushort)(destination == -1 ? 0 : destination),
             ClutId = (byte)clutId,
             Flags = (byte)flags,
@@ -170,7 +172,7 @@ public class CellBuilder
         var baseU = (Vector3.Dot(texInfo.UProjection, vs[0]) / texInfo.UScale + texInfo.Offset.X) % 4;
         var baseV = (Vector3.Dot(texInfo.VProjection, vs[0]) / texInfo.VScale + texInfo.Offset.Y) % 4;
 
-        var planeNorm = Planes[surface.PlaneId].Normal;
+        var planeNorm = planeManager.GetPlane(PlaneIds[surface.PlaneId]).Normal;
         var texU = texInfo.UScale * ProjectionLinearEquation(texInfo.UProjection, texInfo.VProjection, planeNorm);
         var texV = texInfo.VScale * ProjectionLinearEquation(texInfo.VProjection, texInfo.UProjection, planeNorm);
 
@@ -196,7 +198,10 @@ public class CellBuilder
         });
     }
 
-    private static void MergeOrInsert(List<TreeExtractionPoly> polys, TreeExtractionPoly newPoly)
+    private static void MergeOrInsert(
+        PlaneManager planeManager,
+        List<TreeExtractionPoly> polys,
+        TreeExtractionPoly newPoly)
     {
         for (var idx = 0; idx < polys.Count; idx++)
         {
@@ -212,9 +217,10 @@ public class CellBuilder
                 continue;
             }
 
-            if (!poly.Plane.EqualsEpsilon(newPoly.Plane)) continue;
+            var plane = planeManager.GetPlane(poly.Plane);
+            if (poly.Plane != newPoly.Plane) continue;
             if (poly.TexInfo != newPoly.TexInfo) continue;
-            if (!poly.Winding.TryMerge(newPoly.Winding, poly.Plane.Normal, out var newWinding)) continue;
+            if (!poly.Winding.TryMerge(newPoly.Winding, plane.Normal, out var newWinding)) continue;
 
             poly.Winding.Vertices = newWinding.Vertices;
             polys.RemoveAt(idx);
@@ -225,18 +231,15 @@ public class CellBuilder
         polys.Add(newPoly);
     }
 
-    private static int AddMergedPlane(List<Plane> planes, Plane plane)
+    private static int AddMergedPlane(List<int> planeIds, int planeId)
     {
-        for (var i = 0; i < planes.Count; i++)
+        for (var i = 0; i < planeIds.Count; i++)
         {
-            if (plane.EqualsEpsilon(planes[i]))
-            {
-                return i;
-            }
+            if (planeId == planeIds[i]) return i;
         }
 
-        planes.Add(plane);
-        return planes.Count - 1;
+        planeIds.Add(planeId);
+        return planeIds.Count - 1;
     }
 
     private static int AddMergedVertex(List<Vector3> vertices, Vector3 vertex)

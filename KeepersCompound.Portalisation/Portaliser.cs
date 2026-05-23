@@ -20,33 +20,33 @@ public class Portaliser
 
     public WorldRep Portalise(List<BrushDef> brushDefs, bool optimize = true)
     {
-        var bspBrushes = BuildBspBrushes(brushDefs);
+        var (planeManager, bspBrushes) = BuildBspBrushes(brushDefs);
         var bspTree = new BspNode(null);
-        InsertBrushes(bspTree, bspBrushes);
+        InsertBrushes(bspTree, planeManager, bspBrushes);
         var rawLeafs = ComputeBspMediums(bspTree, bspBrushes);
-        var extractionPolys = BuildExtractionPolys(bspTree);
-        AssignTexInfo(bspBrushes, extractionPolys);
+        var extractionPolys = BuildExtractionPolys(bspTree, planeManager);
+        AssignTexInfo(bspBrushes, extractionPolys, planeManager);
         if (optimize)
         {
             var groupedPolys = BuildOptimizePolys(extractionPolys);
-            MergeOptimizePolys(groupedPolys);
-            bspTree = BuildOptimizeBspTree(groupedPolys);
-            InsertBrushes(bspTree, bspBrushes);
+            MergeOptimizePolys(groupedPolys, planeManager);
+            bspTree = BuildOptimizeBspTree(planeManager, groupedPolys);
+            InsertBrushes(bspTree, planeManager, bspBrushes);
             var optimizeRawLeafs = ComputeBspMediums(bspTree, bspBrushes);
-            extractionPolys = BuildExtractionPolys(bspTree);
-            AssignTexInfo(bspBrushes, extractionPolys);
+            extractionPolys = BuildExtractionPolys(bspTree, planeManager);
+            AssignTexInfo(bspBrushes, extractionPolys, planeManager);
             Log.Information("Unique planes: {C}", groupedPolys.Count);
             Log.Information("Optimize leaf count: {l}", optimizeRawLeafs);
         }
 
         var cellBuilders = AssignCells(bspTree);
         var initialCellCount = cellBuilders.Count;
-        ApplyExtractionPolys(cellBuilders, extractionPolys);
+        ApplyExtractionPolys(planeManager, cellBuilders, extractionPolys);
         var wrTreeBuilder = new WrTreeBuilder();
-        wrTreeBuilder.AddCsgTree(bspTree);
-        SplitComplexCells(cellBuilders, wrTreeBuilder);
+        wrTreeBuilder.AddCsgTree(planeManager, bspTree);
+        SplitComplexCells(planeManager, cellBuilders, wrTreeBuilder);
 
-        var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell()).ToList();
+        var wrCells = cellBuilders.Select(protoCell => protoCell.ToCell(planeManager)).ToList();
         var wrTree = wrTreeBuilder.ToWrTree();
         var wr = ConstructWr(wrCells.Count, wrCells, wrTree);
 
@@ -57,32 +57,43 @@ public class Portaliser
         return wr;
     }
 
-    private List<InsertionBrush> BuildBspBrushes(List<BrushDef> brushDefs)
+    private (PlaneManager, List<InsertionBrush>) BuildBspBrushes(List<BrushDef> brushDefs)
     {
+        var planeManager = new PlaneManager();
         var bspBrushes = new List<InsertionBrush>();
         for (var i = 0; i < brushDefs.Count; i++)
         {
             var brush = brushDefs[i];
-            var faces = new List<TreeInsertionPoly>();
-            for (var j = 0; j < brush.Faces.Count; j++)
-            {
-                var winding = new Winding(brush.Faces[j].Plane, _worldSize);
-                for (var k = 0; k < brush.Faces.Count; k++)
-                {
-                    if (k == j) continue;
-                    winding.Clip(brush.Faces[k].Plane);
-                }
+            var polys = new List<TreeInsertionPoly>();
 
-                faces.Add(new TreeInsertionPoly(false, brush.Faces[j].Plane, winding, brush.Faces[j].TexInfo));
+            // Builds the initial poly info for each face of the brush. Note that we're not clipping here because we've
+            // not yet registered all the face planes
+            foreach (var face in brush.Faces)
+            {
+                var planeId = planeManager.AddPlane(face.Plane);
+                var baseWinding = new Winding(planeManager.GetPlane(planeId), _worldSize);
+                polys.Add(new TreeInsertionPoly(false, planeId, baseWinding, face.TexInfo));
             }
 
-            bspBrushes.Add(new InsertionBrush(i, brush.Operation, faces));
+            // Now that the planes for each brush face are registered, we can clip
+            for (var j = 0; j < polys.Count; j++)
+            {
+                var poly = polys[j];
+                for (var k = 0; k < polys.Count; k++)
+                {
+                    if (k == j) continue;
+                    poly.Winding.Clip(planeManager.GetPlane(polys[k].Plane));
+                }
+            }
+
+            // TODO: Verify that the plane merging didn't cause 2 brush planes to be merged?
+            bspBrushes.Add(new InsertionBrush(i, brush.Operation, polys));
         }
 
-        return bspBrushes;
+        return (planeManager, bspBrushes);
     }
 
-    private void InsertBrushes(BspNode root, List<InsertionBrush> bspBrushes)
+    private void InsertBrushes(BspNode root, PlaneManager planeManager, List<InsertionBrush> bspBrushes)
     {
         var stack = new Stack<(BspNode, List<InsertionBrush>)>();
         stack.Push((root, bspBrushes));
@@ -110,7 +121,7 @@ public class Portaliser
                 node.RightChild = new BspNode(node);
             }
 
-            var (leftBrushes, rightBrushes) = SplitBrushList(brushes, node.SplitPlane);
+            var (leftBrushes, rightBrushes) = SplitBrushList(brushes, planeManager, node.SplitPlane);
             stack.Push((node.LeftChild, leftBrushes));
             stack.Push((node.RightChild, rightBrushes));
         }
@@ -142,8 +153,12 @@ public class Portaliser
         return false;
     }
 
-    private (List<InsertionBrush>, List<InsertionBrush>) SplitBrushList(List<InsertionBrush> brushes, Plane splitPlane)
+    private (List<InsertionBrush>, List<InsertionBrush>) SplitBrushList(
+        List<InsertionBrush> brushes,
+        PlaneManager planeManager,
+        int splitPlaneId)
     {
+        var splitPlane = planeManager.GetPlane(splitPlaneId);
         var leftBrushes = new List<InsertionBrush>();
         var rightBrushes = new List<InsertionBrush>();
         foreach (var brush in brushes)
@@ -172,7 +187,7 @@ public class Portaliser
             }
             else
             {
-                var (leftBrush, rightBrush) = SplitBrush(brush, splitPlane);
+                var (leftBrush, rightBrush) = SplitBrush(brush, planeManager, splitPlaneId);
                 leftBrushes.Add(leftBrush);
                 rightBrushes.Add(rightBrush);
             }
@@ -181,8 +196,12 @@ public class Portaliser
         return (leftBrushes, rightBrushes);
     }
 
-    private (InsertionBrush, InsertionBrush) SplitBrush(InsertionBrush brush, Plane splitPlane)
+    private (InsertionBrush, InsertionBrush) SplitBrush(
+        InsertionBrush brush,
+        PlaneManager planeManager,
+        int splitPlaneId)
     {
+        var splitPlane = planeManager.GetPlane(splitPlaneId);
         var leftFaces = new List<TreeInsertionPoly>();
         var rightFaces = new List<TreeInsertionPoly>();
         foreach (var face in brush.Faces)
@@ -204,11 +223,11 @@ public class Portaliser
             var borderWinding = new Winding(splitPlane, _worldSize);
             foreach (var face in brush.Faces)
             {
-                borderWinding.Clip(face.Plane);
+                borderWinding.Clip(planeManager.GetPlane(face.Plane));
             }
 
-            leftFaces.Add(new TreeInsertionPoly(true, splitPlane, borderWinding, new BrushTexInfo()));
-            rightFaces.Add(new TreeInsertionPoly(true, splitPlane.Inverse(), borderWinding.Reversed(),
+            leftFaces.Add(new TreeInsertionPoly(true, splitPlaneId, borderWinding, new BrushTexInfo()));
+            rightFaces.Add(new TreeInsertionPoly(true, -splitPlaneId, borderWinding.Reversed(),
                 new BrushTexInfo()));
         }
         else
@@ -258,7 +277,7 @@ public class Portaliser
         return rawLeafs;
     }
 
-    private void SplitComplexCells(List<CellBuilder> cells, WrTreeBuilder wrTreeBuilder)
+    private void SplitComplexCells(PlaneManager planeManager, List<CellBuilder> cells, WrTreeBuilder wrTreeBuilder)
     {
         var splitOccurred = true;
         while (splitOccurred)
@@ -288,6 +307,7 @@ public class Portaliser
                     1 => new Plane(Vector3.UnitY, -(aabb.Min.Y + dims.Y / 2f)),
                     _ => new Plane(Vector3.UnitZ, -(aabb.Min.Z + dims.Z / 2f)),
                 };
+                var splitPlaneId = planeManager.AddPlane(splitPlane);
 
                 var leftCell = new CellBuilder(cell.Medium);
                 var rightCell = new CellBuilder(cell.Medium);
@@ -299,7 +319,7 @@ public class Portaliser
                         winding.Vertices.Add(cell.Vertices[idx]);
                     }
 
-                    var plane = cell.Planes[surface.PlaneId];
+                    var plane = cell.PlaneIds[surface.PlaneId];
                     var (leftWinding, rightWinding) = winding.Split(splitPlane);
                     if (leftWinding.Vertices.Count > 0)
                     {
@@ -337,7 +357,7 @@ public class Portaliser
                             destWinding.Vertices.Add(destCell.Vertices[idx]);
                         }
 
-                        var destPlane = destCell.Planes[destSurface.PlaneId];
+                        var destPlane = destCell.PlaneIds[destSurface.PlaneId];
                         var (destWindingLeft, destWindingRight) = destWinding.Split(splitPlane);
                         if (destWindingLeft.Vertices.Count > 0)
                         {
@@ -358,13 +378,13 @@ public class Portaliser
                 if (leftCell.Surfaces.Count > 0 && rightCell.Surfaces.Count > 0)
                 {
                     var borderWinding = new Winding(splitPlane, _worldSize);
-                    foreach (var plane in cell.Planes)
+                    foreach (var plane in cell.PlaneIds)
                     {
-                        borderWinding.Clip(plane);
+                        borderWinding.Clip(planeManager.GetPlane(plane));
                     }
 
-                    leftCell.AddPoly(splitPlane, borderWinding, cell.Medium, cells.Count, new BrushTexInfo());
-                    rightCell.AddPoly(splitPlane.Inverse(), borderWinding.Reversed(), cell.Medium, i,
+                    leftCell.AddPoly(splitPlaneId, borderWinding, cell.Medium, cells.Count, new BrushTexInfo());
+                    rightCell.AddPoly(-splitPlaneId, borderWinding.Reversed(), cell.Medium, i,
                         new BrushTexInfo());
                 }
 
@@ -440,48 +460,51 @@ public class Portaliser
         return cellBuilders;
     }
 
-    private List<TreeExtractionPoly> BuildExtractionPolys(BspNode node)
+    private List<TreeExtractionPoly> BuildExtractionPolys(BspNode node, PlaneManager planeManager)
     {
         if (node.LeftChild == null || node.RightChild == null)
         {
             return [];
         }
 
-        var boundaryWinding = new Winding(node.SplitPlane, _worldSize);
+        var boundaryWinding = new Winding(planeManager.GetPlane(node.SplitPlane), _worldSize);
         var curNode = node;
         var parent = curNode.Parent;
         while (parent != null)
         {
-            boundaryWinding.Clip(parent.LeftChild == curNode ? parent.SplitPlane : parent.SplitPlane.Inverse());
+            var splitPlaneId = parent.LeftChild == curNode ? parent.SplitPlane : -parent.SplitPlane;
+            boundaryWinding.Clip(planeManager.GetPlane(splitPlaneId));
             curNode = parent;
             parent = parent.Parent;
         }
 
         var resultPolys = new List<TreeExtractionPoly>();
-        resultPolys.AddRange(BuildExtractionPolys(node.LeftChild));
-        resultPolys.AddRange(BuildExtractionPolys(node.RightChild));
+        resultPolys.AddRange(BuildExtractionPolys(node.LeftChild, planeManager));
+        resultPolys.AddRange(BuildExtractionPolys(node.RightChild, planeManager));
 
         if (boundaryWinding.Vertices.Count < 3)
         {
             return resultPolys;
         }
 
-        resultPolys.AddRange(ClipTreePolys(node.RightChild, ClipTreePolys(node.LeftChild, [
+        resultPolys.AddRange(ClipTreePolys(planeManager, node.RightChild, ClipTreePolys(planeManager, node.LeftChild, [
             new TreeExtractionPoly(node.SplitPlane, boundaryWinding, new BrushTexInfo(), node.LeftChild,
                 node.RightChild)
         ])));
         return resultPolys;
     }
 
-    private (List<TreeExtractionPoly>, List<TreeExtractionPoly>) SplitPolys(BspNode node,
-        List<TreeExtractionPoly> polys, float epsilon = 0.001f)
+    private (List<TreeExtractionPoly>, List<TreeExtractionPoly>) SplitPolys(
+        PlaneManager planeManager,
+        BspNode node,
+        List<TreeExtractionPoly> polys)
     {
         var leftPolys = new List<TreeExtractionPoly>();
         var rightPolys = new List<TreeExtractionPoly>();
         foreach (var poly in polys)
         {
             var nodeIsLeftSide = poly.LeftNode == node;
-            var (left, right) = poly.Winding.Split(node.SplitPlane, epsilon);
+            var (left, right) = poly.Winding.Split(planeManager.GetPlane(node.SplitPlane));
             if (left.Vertices.Count > 0)
             {
                 leftPolys.Add(nodeIsLeftSide
@@ -500,20 +523,26 @@ public class Portaliser
         return (leftPolys, rightPolys);
     }
 
-    private List<TreeExtractionPoly> ClipTreePolys(BspNode node, List<TreeExtractionPoly> polys)
+    private List<TreeExtractionPoly> ClipTreePolys(
+        PlaneManager planeManager,
+        BspNode node,
+        List<TreeExtractionPoly> polys)
     {
         if (polys.Count == 0 || node.Leaf)
         {
             return polys;
         }
 
-        var (leftPolys, rightPolys) = SplitPolys(node, polys);
-        var result = ClipTreePolys(node.LeftChild!, leftPolys);
-        result.AddRange(ClipTreePolys(node.RightChild!, rightPolys));
+        var (leftPolys, rightPolys) = SplitPolys(planeManager, node, polys);
+        var result = ClipTreePolys(planeManager, node.LeftChild!, leftPolys);
+        result.AddRange(ClipTreePolys(planeManager, node.RightChild!, rightPolys));
         return result;
     }
 
-    private static void AssignTexInfo(List<InsertionBrush> brushes, List<TreeExtractionPoly> extractionPolys)
+    private static void AssignTexInfo(
+        List<InsertionBrush> brushes,
+        List<TreeExtractionPoly> extractionPolys,
+        PlaneManager planeManager)
     {
         var brushAabbs = new List<Aabb>();
         foreach (var brush in brushes)
@@ -546,7 +575,7 @@ public class Portaliser
                 var brushAabb = brushAabbs[i];
                 if (!brushAabb.Contains(polyAabb)) continue;
 
-                var coplanarFace = ContainedBrushFace(extractionPoly, brushes[i]);
+                var coplanarFace = ContainedBrushFace(extractionPoly, brushes[i], planeManager);
                 if (coplanarFace >= 0)
                 {
                     bestTexInfo = brushes[i].Faces[coplanarFace].TexInfo;
@@ -568,13 +597,14 @@ public class Portaliser
     /// </summary>
     /// <param name="poly">The poly to check</param>
     /// <param name="brush">The brush it may lie on</param>
+    /// <param name="planeManager">Plane manager to get brush plane details from</param>
     /// <returns>The face index if the brush contains the poly. Otherwise -1.</returns>
-    private static int ContainedBrushFace(TreeExtractionPoly poly, InsertionBrush brush)
+    private static int ContainedBrushFace(TreeExtractionPoly poly, InsertionBrush brush, PlaneManager planeManager)
     {
         var coplanarFace = -1;
         for (var i = 0; i < brush.Faces.Count; i++)
         {
-            var (_, _, counts) = poly.Winding.GetSideDetails(brush.Faces[i].Plane);
+            var (_, _, counts) = poly.Winding.GetSideDetails(planeManager.GetPlane(brush.Faces[i].Plane));
             if (counts[(int)Side.On] == poly.Winding.Vertices.Count) coplanarFace = i;
             else if (counts[(int)Side.Back] > 0) return -1;
         }
@@ -582,7 +612,10 @@ public class Portaliser
         return coplanarFace;
     }
 
-    private static void ApplyExtractionPolys(List<CellBuilder> cellBuilders, List<TreeExtractionPoly> extractionPolys)
+    private static void ApplyExtractionPolys(
+        PlaneManager planeManager,
+        List<CellBuilder> cellBuilders,
+        List<TreeExtractionPoly> extractionPolys)
     {
         var polyLists = new List<List<TreeExtractionPoly>>(cellBuilders.Count);
         for (var i = 0; i < cellBuilders.Count; i++)
@@ -601,13 +634,13 @@ public class Portaliser
 
         for (var i = 0; i < cellBuilders.Count; i++)
         {
-            cellBuilders[i].AddMergedPolys(polyLists[i]);
+            cellBuilders[i].AddMergedPolys(planeManager, polyLists[i]);
         }
     }
 
-    private static List<(Plane, List<OptimizePoly>)> BuildOptimizePolys(List<TreeExtractionPoly> extractionPolys)
+    private static List<(int, List<OptimizePoly>)> BuildOptimizePolys(List<TreeExtractionPoly> extractionPolys)
     {
-        var groupedPolys = new List<(Plane, List<OptimizePoly>)>();
+        var groupedPolys = new List<(int, List<OptimizePoly>)>();
         foreach (var poly in extractionPolys)
         {
             if (poly is { LeftNode: not null, RightNode: not null } &&
@@ -619,8 +652,8 @@ public class Portaliser
             var added = false;
             foreach (var (plane, polys) in groupedPolys)
             {
-                var sameDir = plane.EqualsEpsilon(poly.Plane, 0.0001f);
-                if (sameDir || plane.EqualsEpsilon(poly.Plane.Inverse(), 0.0001f))
+                var sameDir = plane == poly.Plane;
+                if (sameDir || plane == -poly.Plane)
                 {
                     polys.Add(new OptimizePoly(poly.Winding, !sameDir));
                     added = true;
@@ -637,12 +670,13 @@ public class Portaliser
         return groupedPolys;
     }
 
-    private static void MergeOptimizePolys(List<(Plane, List<OptimizePoly>)> groupedPolys)
+    private static void MergeOptimizePolys(List<(int, List<OptimizePoly>)> groupedPolys, PlaneManager planeManager)
     {
         // TODO: Is this whole step necessary? I think it fundamentally doesn't really change the result.
         //       Really I need to benchmark if it's faster to do this + BSP, or just BSP raw.
-        foreach (var (plane, polys) in groupedPolys)
+        foreach (var (planeId, polys) in groupedPolys)
         {
+            var plane = planeManager.GetPlane(planeId);
             var mergedPolys = new List<OptimizePoly>();
             foreach (var originalPoly in polys)
             {
@@ -669,11 +703,13 @@ public class Portaliser
         }
     }
 
-    private static BspNode BuildOptimizeBspTree(List<(Plane, List<OptimizePoly>)> groupedOptimizePolys)
+    private static BspNode BuildOptimizeBspTree(
+        PlaneManager planeManager,
+        List<(int, List<OptimizePoly>)> groupedOptimizePolys)
     {
         // TODO: Choose better plane
         var root = new BspNode(null);
-        var stack = new Stack<(BspNode, List<(Plane, List<OptimizePoly>)>)>();
+        var stack = new Stack<(BspNode, List<(int, List<OptimizePoly>)>)>();
         stack.Push((root, groupedOptimizePolys));
         while (stack.TryPop(out var info))
         {
@@ -684,8 +720,8 @@ public class Portaliser
             var bestScore = int.MaxValue;
             for (var i = 0; i < groupedPolys.Count; i++)
             {
-                var splitPlane = groupedPolys[i].Item1;
-                var score = ScoreOptimizeSplitPlane(splitPlane, groupedPolys);
+                var splitPlaneId = groupedPolys[i].Item1;
+                var score = ScoreOptimizeSplitPlane(planeManager, splitPlaneId, groupedPolys);
                 if (score < bestScore)
                 {
                     splitIndex = i;
@@ -693,14 +729,14 @@ public class Portaliser
                 }
             }
 
-            var plane = groupedPolys[splitIndex].Item1;
+            var planeId = groupedPolys[splitIndex].Item1;
             groupedPolys.RemoveAt(splitIndex);
 
-            node.SplitPlane = plane;
+            node.SplitPlane = planeId;
             node.LeftChild = new BspNode(node);
             node.RightChild = new BspNode(node);
 
-            var (leftGroupedPolys, rightGroupedPolys) = SplitGroupedPolys(groupedPolys, plane);
+            var (leftGroupedPolys, rightGroupedPolys) = SplitGroupedPolys(planeManager, groupedPolys, planeId);
             stack.Push((node.LeftChild, leftGroupedPolys));
             stack.Push((node.RightChild, rightGroupedPolys));
         }
@@ -708,16 +744,20 @@ public class Portaliser
         return root;
     }
 
-    private static int ScoreOptimizeSplitPlane(Plane splitPlane, List<(Plane, List<OptimizePoly>)> groupedPolys)
+    private static int ScoreOptimizeSplitPlane(
+        PlaneManager planeManager,
+        int splitPlaneId,
+        List<(int, List<OptimizePoly>)> groupedPolys)
     {
+        var splitPlane = planeManager.GetPlane(splitPlaneId);
         var splits = 0;
         var front = 0;
         var back = 0;
-        foreach (var (plane, polys) in groupedPolys)
+        foreach (var (planeId, polys) in groupedPolys)
         {
             foreach (var poly in polys)
             {
-                if (plane.EqualsEpsilon(splitPlane)) continue;
+                if (planeId == splitPlaneId) continue;
 
                 var (_, _, counts) = poly.Winding.GetSideDetails(splitPlane);
                 if (counts[(int)Side.Back] == 0)
@@ -742,11 +782,14 @@ public class Portaliser
         return splits * 2 + int.Abs(front - back) + (axial ? 0 : (front + back + splits) / 10);
     }
 
-    private static (List<(Plane, List<OptimizePoly>)>, List<(Plane, List<OptimizePoly>)>)
-        SplitGroupedPolys(List<(Plane, List<OptimizePoly>)> groupedPolys, Plane splitPlane)
+    private static (List<(int, List<OptimizePoly>)>, List<(int, List<OptimizePoly>)>) SplitGroupedPolys(
+            PlaneManager planeManager,
+            List<(int, List<OptimizePoly>)> groupedPolys,
+            int splitPlaneId)
     {
-        var leftGroupedPolys = new List<(Plane, List<OptimizePoly>)>();
-        var rightGroupedPolys = new List<(Plane, List<OptimizePoly>)>();
+        var splitPlane = planeManager.GetPlane(splitPlaneId);
+        var leftGroupedPolys = new List<(int, List<OptimizePoly>)>();
+        var rightGroupedPolys = new List<(int, List<OptimizePoly>)>();
         foreach (var group in groupedPolys)
         {
             // TODO: The majority of planes are axial, so there's probably an early out check for parallel planes
