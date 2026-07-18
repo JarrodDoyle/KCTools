@@ -88,14 +88,21 @@ public static class DarkImageLoader
     private static Image LoadGif(Stream stream)
     {
         var image = Image.Load(stream);
-        var meta = image.Metadata.GetGifMetadata();
-        meta.BackgroundColorIndex = 0;
-
         for (var i = image.Frames.Count - 1; i > 0; i--)
         {
             image.Frames.RemoveFrame(i);
         }
 
+        var frameMetadata = image.Frames[0].Metadata.GetGifMetadata();
+        frameMetadata.HasTransparency = true;
+        frameMetadata.TransparencyIndex = 0;
+        image.Metadata.GetGifMetadata().BackgroundColorIndex = 0;
+
+        // We have to re-encode again, otherwise the transparency metadata gets dropped when saving as PNG
+        using var newStream = new MemoryStream();
+        image.SaveAsGif(newStream);
+        newStream.Position = 0;
+        image = Image.Load(newStream);
         return image;
     }
 }
