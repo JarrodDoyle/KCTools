@@ -14,7 +14,7 @@ public class ResourceManager
     public string ActiveCampaign { get; private set; }
 
     private readonly VirtualFileSystem _vfs;
-    private readonly ResourceSet _omResources;
+    private ResourceSet _omResources;
     private readonly Dictionary<string, ResourceSet> _fmResources;
     private readonly Dictionary<string, ModelFile> _modelCache;
 
@@ -30,8 +30,11 @@ public class ResourceManager
 
     public void Reset()
     {
+        ActiveCampaign = "";
         _vfs.Reset();
         _modelCache.Clear();
+        _omResources = LoadResources("", Context.LoadPaths, Context.ResPaths);
+        _fmResources.Clear();
     }
 
     public bool SetActiveCampaign(string campaignName)
