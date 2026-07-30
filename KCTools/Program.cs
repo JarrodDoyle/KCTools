@@ -1,9 +1,12 @@
+using System.Diagnostics;
 using System.Numerics;
 using System.Reflection;
 using DotMake.CommandLine;
 using KeepersCompound.Dark;
 using KeepersCompound.Dark.Database;
 using KeepersCompound.Dark.Database.Chunks;
+using KeepersCompound.Portalisation;
+using KeepersCompound.Portalisation.Brush.Extractor;
 using KeepersCompound.Dark.Resources;
 using KeepersCompound.Formats.Images;
 using KeepersCompound.Formats.Model;
@@ -16,6 +19,7 @@ using SharpGLTF.Materials;
 using SharpGLTF.Memory;
 using SharpGLTF.Scenes;
 using SharpGLTF.Transforms;
+using AlphaMode = SharpGLTF.Materials.AlphaMode;
 
 namespace KCTools;
 
@@ -50,6 +54,149 @@ internal static class Program
 [CliCommand(Description = "Tools for working with NewDark files.")]
 public class RootCommand
 {
+    [CliCommand(Description = "Compute base WorldRep for a NewDark .MIS/.COW")]
+    public class PortaliseCommand
+    {
+        [CliArgument(Description = "The path to the root Thief installation.")]
+        public required string InstallPath { get; set; }
+
+        [CliArgument(Description = "Mission filename including extension.")]
+        public required string MissionName { get; set; }
+
+        [CliOption(Description = "Fan mission folder name. Uses OMs if not specified.")]
+        public string? CampaignName { get; set; } = null;
+
+        [CliOption(Description = "Name of output file excluding extension. Defaults to mission name if not specified.")]
+        public string? OutputName { get; set; } = null;
+
+        [CliOption(Description = "Disable terminal output.")]
+        public bool Quiet { get; set; } = false;
+
+        [CliOption(Description = "Automatically obtain campaign name from `DromEd.log`. Overrides `--campaign-name`.")]
+        public bool AutoCampaign { get; set; } = false;
+
+        [CliOption(Description = "Disables the BSP/WorldRep optimisation step. Faster output, but increased cell count.")]
+        public bool FastMode { get; set; } = false;
+
+        public int Run()
+        {
+            Program.ConfigureLogger(Quiet);
+            Log.Information("KCTools version: {version}", Assembly.GetEntryAssembly()?.GetName().Version);
+
+            Timing.Reset();
+            var exitCode = Timing.TimeStage("Total", () =>
+            {
+                var context = Timing.TimeStage("Initialise install context", () => new InstallContext(InstallPath));
+                if (!context.Valid)
+                {
+                    Log.Error("Invalid install context");
+                    return ExitCode.Error;
+                }
+
+                if (AutoCampaign)
+                {
+                    Timing.TimeStage("Auto-detecting Campaign", CampaignFromDromedLog);
+                }
+
+                CampaignName ??= "";
+                if (CampaignName != "" && !context.Fms.Contains(CampaignName))
+                {
+                    Log.Error("Failed to find campaign: {campaign}", CampaignName);
+                    return ExitCode.Error;
+                }
+
+                var resources = Timing.TimeStage("Resource Path Gathering", () =>
+                {
+                    var resourceManager = new ResourceManager(context);
+                    resourceManager.SetActiveCampaign(CampaignName);
+                    return resourceManager;
+                });
+
+                var (loaded, mission) = Timing.TimeStage("Load Mission File", () =>
+                {
+                    var loaded = resources.TryGetDbFile(MissionName, out var mission);
+                    return (loaded, mission);
+                });
+
+                if (!loaded || mission == null)
+                {
+                    Log.Error("Failed to load mission: {name}", MissionName);
+                    return ExitCode.Error;
+                }
+
+                if (!LightMapper.RequiredChunksExist(mission) ||
+                    !mission.TryGetChunk<WorldRep>("WREXT", out var worldRep) ||
+                    !mission.TryGetChunk<BrList>("BRLIST", out var brList))
+                {
+                    Log.Error("Failed to load required chunk.");
+                    return ExitCode.Error;
+                }
+
+                var extractor = new BrushDefExtractor();
+                extractor.AddBrushList(brList.Brushes);
+                // TODO: - Insert blockable brushes
+                var brushDefs = extractor.BrushDefs;
+                var portaliser = new Portaliser(1000f);
+                var wr = Timing.TimeStage("Portalise", () => portaliser.Portalise(brushDefs, !FastMode));
+                mission.Chunks[wr.Header.Name] = wr;
+
+                if (resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
+                    resources.TryGetFilePath(virtualMisPath, out var misPath))
+                {
+                    var folder = Path.GetDirectoryName(misPath);
+                    var misName = OutputName != null ? OutputName + Path.GetExtension(misPath) : MissionName;
+                    var savePath = Path.Join(folder, misName);
+                    Timing.TimeStage("Save Mission File", () => mission.Save(savePath));
+                }
+                else
+                {
+                    Log.Error("Failed to find a valid mission save path: {name}", MissionName);
+                    return ExitCode.Error;
+                }
+
+                return ExitCode.Success;
+            });
+            Timing.LogAll();
+
+            return (int)exitCode;
+        }
+
+        private void CampaignFromDromedLog()
+        {
+            try
+            {
+                Log.Information("Opening `DromEd.log`");
+
+                var path = $"{InstallPath}/DromEd.log";
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                using var sr = new StreamReader(fs);
+
+                while (!sr.EndOfStream)
+                {
+                    var line = sr.ReadLine();
+                    if (line == null || !line.StartsWith(": FM Path: "))
+                    {
+                        continue;
+                    }
+
+                    CampaignName = line[11..].Split(@"\").Last();
+
+                    // We don't early out here because we want to get the last occurence of an FM load
+                    // If FMSel is configured to be returned to after closing DromEd then multiple FM loads can happen
+                }
+
+                if (CampaignName != null)
+                {
+                    Log.Information("Obtained campaign name: {CampaignName}", CampaignName);
+                }
+            }
+            catch (Exception e)
+            {
+                Log.Error("Failed to automatically obtain campaign name.");
+            }
+        }
+    }
+
     [CliCommand(Description = "Compute lightmaps for a NewDark .MIS/.COW")]
     public class LightCommand
     {
@@ -62,7 +209,8 @@ public class RootCommand
         [CliOption(Description = "Fan mission folder name. Uses OMs if not specified.")]
         public string? CampaignName { get; set; } = null;
 
-        [CliOption(Description = "Name of output file excluding extension. Overwrites existing mission if not specified.")]
+        [CliOption(Description =
+            "Name of output file excluding extension. Overwrites existing mission if not specified.")]
         public string? OutputName { get; set; } = null;
 
         [CliOption(Description = "Report light configuration problems without performing any lighting.")]
@@ -149,8 +297,10 @@ public class RootCommand
                         {
                             Log.Error("{l}", line);
                         }
+
                         return ExitCode.Error;
                     }
+
                     if (resources.TryGetDbFileVirtualPath(MissionName, out var virtualMisPath) &&
                         resources.TryGetFilePath(virtualMisPath, out var misPath))
                     {
@@ -192,7 +342,7 @@ public class RootCommand
                     }
 
                     CampaignName = line[11..].Split(@"\").Last();
-                    
+
                     // We don't early out here because we want to get the last occurence of an FM load
                     // If FMSel is configured to be returned to after closing DromEd then multiple FM loads can happen
                 }
@@ -208,7 +358,7 @@ public class RootCommand
             }
         }
     }
-    
+
     [CliCommand(Description = ".BIN model file handling")]
     public class ModelCommand
     {
@@ -226,9 +376,8 @@ public class RootCommand
             [CliOption(Description = "The name of the model.")]
             public string? ModelName { get; set; } = null;
 
-            [CliOption(
-                Description = "Folder to output exported models to. If not set models will be exported to a `models` directory alongside kctools."
-            )]
+            [CliOption(Description =
+                "Folder to output exported models to. If not set models will be exported to a `models` directory alongside kctools.")]
             public string? OutputDirectory { get; set; } = null;
 
             [CliOption(Description = "Disable terminal output.")]
@@ -356,7 +505,7 @@ public class RootCommand
                         }
                     }
 
-                    var transform = subObject.JointType == ModelObjectType.Static  || subObject.JointIndex == -1
+                    var transform = subObject.JointType == ModelObjectType.Static || subObject.JointIndex == -1
                         ? AffineTransform.Identity
                         : AffineTransform.CreateDecomposed(subObject.Transform);
                     var node = new NodeBuilder(subObject.Name);
