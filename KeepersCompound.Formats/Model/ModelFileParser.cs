@@ -3,7 +3,7 @@ using System.Numerics;
 
 namespace KeepersCompound.Formats.Model;
 
-public class ModelFileParser : IBinaryParser<ModelFile>
+public class ModelFileParser : IBinaryParser<ModelFile?>
 {
     public ModelFile? Read(BinaryReader reader)
     {
@@ -282,8 +282,13 @@ public class ModelFileParser : IBinaryParser<ModelFile>
         };
     }
 
-    public void Write(BinaryWriter writer, ModelFile modelFile)
+    public void Write(BinaryWriter writer, ModelFile? modelFile)
     {
+        if (modelFile is null)
+        {
+            return;
+        }
+
         writer.WriteNullString("LGMD", 4);
         writer.Write(modelFile.Version);
         writer.WriteNullString(modelFile.Name, 8);
