@@ -340,13 +340,12 @@ public class LightMapper
     {
         var sz = brush.Size;
 
-        var brightness = Math.Min(sz.X, 255.0f);
         var saturation = sz.Z * Settings.Saturation;
         var light = new Light
         {
             Position = brush.Position,
-            Color = Utils.HsbToRgb(sz.Y, saturation, brightness),
-            Brightness = brightness,
+            Color = Utils.HsbToRgb(sz.Y, saturation, sz.X),
+            Brightness = sz.X,
             Hue = sz.Y,
             Saturation = saturation,
             Radius = float.MaxValue,
