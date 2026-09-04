@@ -7,11 +7,11 @@
 
 [TTLG Release Thread](https://www.ttlg.com/forums/showthread.php?t=152903)
 
-KCTools is a collection of tools for working with [NewDark 1.27](https://www.ttlg.com/forums/showthread.php?t=149856) files. Currently there are two tools, a lightmapping tool, and a .BIN model export tool. The latest release can be downloaded [here](https://github.com/JarrodDoyle/KeepersCompound.Lightmapper/releases/latest).
+KCTools is a collection of tools for working with [NewDark 1.28](https://www.ttlg.com/forums/showthread.php?t=152974) files. Currently there are two tools, a lightmapping tool, and a .BIN model export tool. The latest release can be downloaded [here](https://github.com/JarrodDoyle/KeepersCompound.Lightmapper/releases/latest).
 
 ## Light
 
-An external lightmapping tool for [NewDark 1.27](https://www.ttlg.com/forums/showthread.php?t=149856) fan missions. DromEd's built-in lighting is single-threaded, has a number of bugs, and scales extremely poorly with lightmap scale and large open spaces. KCTools Light uses a multithreaded approach with a modern raytracing library to improve lighting times, reduce lighting artifacts, and often improves in-game performance in complex scenes.
+An external lightmapping tool for [NewDark 1.28](https://www.ttlg.com/forums/showthread.php?t=152974) fan missions. DromEd's built-in lighting is single-threaded, has a number of bugs, and scales extremely poorly with lightmap scale and large open spaces. KCTools Light uses a multithreaded approach with a modern raytracing library to improve lighting times, reduce lighting artifacts, and often improves in-game performance in complex scenes.
 
 ### Features
 
@@ -20,6 +20,7 @@ An external lightmapping tool for [NewDark 1.27](https://www.ttlg.com/forums/sho
 - Better light culling, improving performance in large-scale city maps and eliminating object lighting errors
 - Additional warnings to mappers for mis-configured lights
 - Produces generally more accurate shadows
+- Near seamless integration within DromEd thanks to a custom script module
 
 ### Benchmarks
 
@@ -57,7 +58,9 @@ Arguments:
 Options:
   -c, --campaign-name  Fan mission folder name. Uses OMs if not specified.
   -o, --output-name    Name of output file excluding extension. Overwrites existing mission if not specified.
-  -s, --simple-vis     Use a simpler Light to Cell visibility calculation. Only use for debugging. [default: False]
+  -i, --inspect        Report light configuration problems without performing any lighting. [default: False]
+  -q, --quiet          Disable terminal output. [default: False]
+  -a, --auto-campaign  Automatically obtain campaign name from `DromEd.log`. Overrides `--campaign-name`. [default: False]
   -?, -h, --help       Show help and usage information
 ```
 
@@ -83,13 +86,14 @@ Arguments:
 Options:
   -c, --campaign-name     The folder name of a fan mission.
   -m, --model-name        The name of the model.
-  -o, --output-directory  Folder to output exported models to. If not set models will be exported alongside the original.
+  -o, --output-directory  Folder to output exported models to. If not set models will be exported to a `models` directory alongside kctools.
+  -q, --quiet             Disable terminal output. [default: False]
   -?, -h, --help          Show help and usage information
 ```
 
 ## Building
 
-This project requires the [.NET 9.0 runtime and SDK](https://dotnet.microsoft.com/en-us/download/dotnet/9.0). Raytracing uses a forked version of [TinyEmbree](https://github.com/pgrit/TinyEmbree) with backface culling enabled, a pre-built package can be found in `LocalPackages`.
+This project requires the [.NET 10.0 runtime and SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0). Raytracing uses a forked version of [TinyEmbree](https://github.com/pgrit/TinyEmbree) with backface culling enabled, a pre-built package can be found in `LocalPackages`.
 
 ## AI Policy
 
