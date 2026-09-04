@@ -1,5 +1,8 @@
 # KCTools
 
+[![AI Policy](https://img.shields.io/badge/ai_policy-human_contributions_only-green.svg)](#ai-policy)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](#license)
+
 ## Description
 
 [TTLG Release Thread](https://www.ttlg.com/forums/showthread.php?t=152903)
@@ -88,6 +91,16 @@ Options:
 
 This project requires the [.NET 9.0 runtime and SDK](https://dotnet.microsoft.com/en-us/download/dotnet/9.0). Raytracing uses a forked version of [TinyEmbree](https://github.com/pgrit/TinyEmbree) with backface culling enabled, a pre-built package can be found in `LocalPackages`.
 
+## AI Policy
+
+This repo operates under a strict "No LLM/AI contributions" policy:
+
+- No LLMs for issues
+- No LLMs for PRs
+- No LLMs for communication
+
+Any contributor found to be in violation of this policy will have their contribution rejected and be banned from future contributions.
+
 ## License
 
-Distributed under the MIT License. See `LICENSE` for more information.
+All code within this repository is under the [MIT License](LICENSE) unless otherwise stated.
