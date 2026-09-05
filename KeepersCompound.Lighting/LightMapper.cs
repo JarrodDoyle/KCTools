@@ -191,6 +191,12 @@ public class LightMapper
         {
             var light = _lights[i];
 
+            if (light.ObjId == -1 && light.Brightness > 1024)
+            {
+                Log.Warning("Brush at {Id}: Brightness exceeds DromEd maximum input. Possibly corrupted light?",
+                    light.Position);
+            }
+
             if (light.QuadLit && Settings.MultiSampling != SoftnessMode.Standard)
             {
                 if (light.ObjId != -1)
