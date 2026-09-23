@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="KCLight.Gui/KCLight.Gui.csproj" />
+  <Project Path="KCTools/KCTools.csproj" />
+  <Project Path="KeepersCompound.Dark/KeepersCompound.Dark.csproj" />
+  <Project Path="KeepersCompound.Formats.Images/KeepersCompound.Formats.Images.csproj" />
+  <Project Path="KeepersCompound.Formats/KeepersCompound.Formats.csproj" />
+  <Project Path="KeepersCompound.Lighting/KeepersCompound.Lighting.csproj" />
+</Solution>
