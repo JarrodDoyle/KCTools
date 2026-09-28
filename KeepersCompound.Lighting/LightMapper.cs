@@ -743,6 +743,12 @@ public class LightMapper
 
                             var light = _lights[lightIdx - 1];
 
+                            // Negative brightness lights should affect the lightgem, but not the lightmap
+                            if (light.Brightness < 0)
+                            {
+                                continue;
+                            }
+
                             // If the light is behind the plane we'll never be directly lit by this light.
                             // Additionally, if the distance from the plane is more than the light's radius
                             // we know no points on the plane will be lit.
@@ -781,7 +787,7 @@ public class LightMapper
                                 }
                             }
 
-                            if (strength != 0f)
+                            if (strength > 0f)
                             {
                                 var layer = 0;
 
